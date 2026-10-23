@@ -5,15 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MarkRust</title>
 
-<!-- Quill.js: WYSIWYG Editor -->
-<link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
-
-<!-- marked.js: Markdown → HTML (untuk load) -->
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-
-<!-- Turndown: HTML → Markdown (untuk export) -->
-<script src="https://cdn.jsdelivr.net/npm/turndown/dist/turndown.js"></script>
+<!-- Semua library di-vendoring lokal: aplikasi tetap berfungsi offline. -->
+<link rel="stylesheet" href="vendor/quill/quill.snow.css">
+<link rel="stylesheet" href="vendor/highlight/night-owl.min.css">
 
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -34,9 +28,11 @@
     --pink:       #f38ba8;
     --purple:     #cba6f7;
     --peach:      #fab387;
+    --code-bg:    #15152a;
+    --code-text:  #d6deeb;
     --radius:     8px;
     --font-sans:  'Inter', 'Segoe UI', system-ui, sans-serif;
-    --font-mono:  'JetBrains Mono', 'Fira Code', monospace;
+    --font-mono:  'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
   }
 
   html, body {
@@ -278,33 +274,6 @@
     color: var(--text-dim) !important;
   }
 
-  .ql-editor pre {
-    background: #1a1a2e !important;
-    color: var(--yellow) !important;
-    border: 1px solid #2e2e48 !important;
-    border-radius: var(--radius) !important;
-    padding: 14px 18px !important;
-    font-family: var(--font-mono) !important;
-    font-size: 13px !important;
-    margin: 0.5em 0 !important;
-  }
-
-  .ql-editor code,
-  .ql-editor pre.ql-syntax {
-    background: #1a1a2e !important;
-    color: var(--yellow) !important;
-    font-family: var(--font-mono) !important;
-    font-size: 13px !important;
-    border-radius: 4px !important;
-  }
-
-  .ql-editor ul > li::before {
-    color: var(--accent) !important;
-  }
-  .ql-editor ol > li::before {
-    color: var(--accent) !important;
-  }
-
   .ql-editor hr {
     border: none !important;
     height: 1px !important;
@@ -315,6 +284,80 @@
   .ql-editor img {
     max-width: 100%;
     border-radius: var(--radius);
+  }
+
+  /* Inline code */
+  .ql-editor code {
+    background: var(--code-bg) !important;
+    color: var(--yellow) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 13px !important;
+    border-radius: 4px !important;
+    padding: 2px 5px !important;
+  }
+
+  /* ====== CODE BLOCK ======
+     Quill 2 merender code block sebagai DIV (.ql-code-block-container),
+     BUKAN <pre>. Selector lama ".ql-editor pre" tidak pernah cocok. */
+  .ql-editor .ql-code-block-container {
+    position: relative;
+    background: var(--code-bg) !important;
+    color: var(--code-text) !important;
+    border: 1px solid #2e2e48 !important;
+    border-radius: var(--radius) !important;
+    padding: 30px 18px 14px !important;
+    margin: 0.5em 0 !important;
+    font-family: var(--font-mono) !important;
+    font-size: 13px !important;
+    line-height: 1.6 !important;
+    white-space: pre-wrap !important;
+  }
+
+  .ql-editor .ql-code-block-container .ql-code-block {
+    font-family: var(--font-mono) !important;
+    font-size: 13px !important;
+    line-height: 1.6 !important;
+    min-height: 1.6em;
+  }
+
+  /* Dropdown pemilih bahasa yang disuntikkan modul syntax Quill */
+  .ql-editor .ql-code-block-container > .ql-ui {
+    position: absolute;
+    top: 5px;
+    right: 8px;
+    width: auto;
+    height: 20px;
+    padding: 0 4px;
+    font-family: var(--font-sans) !important;
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    outline: none;
+    cursor: pointer;
+    opacity: 0.55;
+    transition: opacity 0.15s;
+  }
+  .ql-editor .ql-code-block-container:hover > .ql-ui { opacity: 1; }
+
+  /* Warna token dari tema highlight.js (night-owl) */
+  .ql-editor .ql-token { background: transparent !important; }
+
+  .ql-editor ul > li::before,
+  .ql-editor ol > li::before {
+    color: var(--accent) !important;
+  }
+
+  /* ====== TABLE ====== */
+  .ql-editor table {
+    border-collapse: collapse;
+    margin: 0.6em 0;
+  }
+  .ql-editor table td {
+    border: 1px solid var(--border) !important;
+    padding: 6px 12px !important;
+    min-width: 60px;
   }
 
   /* ====== RAW MARKDOWN VIEW ====== */
@@ -337,6 +380,8 @@
     font-size: 14px;
     line-height: 1.7;
     overflow-y: auto;
+    white-space: pre;
+    tab-size: 2;
   }
 
   #raw-view textarea::-webkit-scrollbar { width: 8px; }
@@ -384,8 +429,8 @@
     <div class="sep"></div>
     <div id="quill-toolbar"></div>
     <div class="toolbar-right">
-      <button class="mode-btn active" id="btn-wysiwyg" onclick="setMode('wysiwyg')">✦ WYSIWYG</button>
-      <button class="mode-btn" id="btn-markdown" onclick="setMode('markdown')">⟨/⟩ Markdown</button>
+      <button class="mode-btn active" id="btn-wysiwyg" type="button">✦ WYSIWYG</button>
+      <button class="mode-btn" id="btn-markdown" type="button">⟨/⟩ Markdown</button>
     </div>
   </div>
 
@@ -396,7 +441,7 @@
 
   <!-- RAW MARKDOWN VIEW -->
   <div id="raw-view">
-    <textarea id="raw-textarea" placeholder="Raw Markdown..."></textarea>
+    <textarea id="raw-textarea" placeholder="Raw Markdown..." spellcheck="false"></textarea>
   </div>
 
   <!-- STATUS BAR -->
@@ -411,127 +456,10 @@
   </div>
 </div>
 
-<script>
-  // ====== QUILL SETUP ======
-  const toolbarOptions = [
-    [{ 'header': [1, 2, 3, false] }],
-    ['bold', 'italic', 'underline', 'strike'],
-    [{ 'color': [] }, { 'background': [] }],
-    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-    ['blockquote', 'code-block'],
-    ['link', 'image'],
-    ['clean']
-  ];
-
-  const quill = new Quill('#editor', {
-    modules: {
-      toolbar: {
-        container: toolbarOptions,
-        handlers: {}
-      }
-    },
-    theme: 'snow',
-    placeholder: 'Mulai mengetik di sini... (WYSIWYG mode)'
-  });
-
-  // Pindahkan toolbar Quill ke dalam toolbar kita
-  const quillToolbar = document.querySelector('.ql-toolbar');
-  document.getElementById('quill-toolbar').appendChild(quillToolbar);
-
-  // ====== TURNDOWN (HTML → Markdown) ======
-  const turndownService = new TurndownService({
-    headingStyle: 'atx',
-    codeBlockStyle: 'fenced',
-    emDelimiter: '*',
-    bulletListMarker: '-'
-  });
-
-  // ====== DEFAULT CONTENT ======
-  const defaultMarkdown = `# Selamat Datang di MarkRust ✨
-
-Ini adalah **WYSIWYG Markdown Editor** yang dibuat dengan *Rust* + *Tauri*.
-
-## Cara Pakai
-
-Ketik langsung di area editor ini. Semua formatting **langsung terlihat** saat kamu mengetik — tidak perlu split view!
-
-### Fitur
-
-- **Bold**, *italic*, ~~strikethrough~~ langsung terlihat
-- Heading dengan warna berbeda
-- Bullet dan numbered list
-- Blockquote dengan border ungu
-- Code block dengan syntax style
-- Link dan gambar
-
-### Contoh Code
-
-\`\`\`
-fn main() {
-    println!("Hello, MarkRust!");
-}
-\`\`\`
-
-> "Simplicity is the ultimate sophistication."
-> — Leonardo da Vinci
-
----
-
-Coba klik tombol **⟨/⟩ Markdown** di kanan atas untuk melihat raw markdown-nya! 🚀
-`;
-
-  // Load default content
-  quill.root.innerHTML = marked.parse(defaultMarkdown);
-
-  // ====== MODE SWITCHING ======
-  let currentMode = 'wysiwyg';
-
-  function setMode(mode) {
-    if (mode === currentMode) return;
-
-    if (mode === 'markdown') {
-      // WYSIWYG → Markdown: convert HTML ke Markdown
-      const html = quill.root.innerHTML;
-      const md = turndownService.turndown(html);
-      document.getElementById('raw-textarea').value = md;
-
-      document.getElementById('editor-wrap').style.display = 'none';
-      document.getElementById('raw-view').style.display = 'flex';
-    } else {
-      // Markdown → WYSIWYG: convert Markdown ke HTML
-      const md = document.getElementById('raw-textarea').value;
-      quill.root.innerHTML = marked.parse(md);
-
-      document.getElementById('raw-view').style.display = 'none';
-      document.getElementById('editor-wrap').style.display = 'flex';
-    }
-
-    currentMode = mode;
-    document.getElementById('btn-wysiwyg').classList.toggle('active', mode === 'wysiwyg');
-    document.getElementById('btn-markdown').classList.toggle('active', mode === 'markdown');
-    updateStats();
-  }
-
-  // ====== STATS ======
-  function updateStats() {
-    let text = '';
-    if (currentMode === 'wysiwyg') {
-      text = quill.getText();
-    } else {
-      text = document.getElementById('raw-textarea').value;
-    }
-    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-    const chars = text.length;
-    document.getElementById('stat-words').textContent = `Words: ${words}`;
-    document.getElementById('stat-chars').textContent = `Chars: ${chars}`;
-  }
-
-  quill.on('text-change', updateStats);
-  document.getElementById('raw-textarea').addEventListener('input', updateStats);
-
-  // ====== INIT ======
-  updateStats();
-</script>
+<script src="vendor/highlight/highlight.min.js"></script>
+<script src="vendor/quill/quill.js"></script>
+<script src="vendor/marked/marked.umd.js"></script>
+<script src="app.js"></script>
 
 </body>
 </html>
