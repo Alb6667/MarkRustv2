@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MarkRust</title>
+
+<!-- Quill.js: WYSIWYG Editor -->
+<link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
+
+<!-- marked.js: Markdown → HTML (untuk load) -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+<!-- Turndown: HTML → Markdown (untuk export) -->
+<script src="https://cdn.jsdelivr.net/npm/turndown/dist/turndown.js"></script>
+
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-deep:    #181825;
+    --bg-base:    #1e1e2e;
+    --bg-surface: #252538;
+    --bg-overlay: #313145;
+    --border:     #3b3b54;
+    --border-hi:  #585878;
+    --text:       #cdd6f4;
+    --text-dim:   #a6adc8;
+    --text-muted: #6c7086;
+    --accent:     #89b4fa;
+    --green:      #a6e3a1;
+    --yellow:     #f9e2af;
+    --pink:       #f38ba8;
+    --purple:     #cba6f7;
+    --peach:      #fab387;
+    --radius:     8px;
+    --font-sans:  'Inter', 'Segoe UI', system-ui, sans-serif;
+    --font-mono:  'JetBrains Mono', 'Fira Code', monospace;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg-deep);
+    color: var(--text);
+    font-family: var(--font-sans);
+    overflow: hidden;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* ====== TOOLBAR ====== */
+  #toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: var(--bg-base);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    height: 46px;
+    -webkit-app-region: drag;
+  }
+  #toolbar > * { -webkit-app-region: no-drag; }
+
+  .brand {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--accent);
+    margin-right: 8px;
+  }
+
+  .sep {
+    width: 1px;
+    height: 22px;
+    background: var(--border);
+    margin: 0 6px;
+  }
+
+  /* Override Quill toolbar */
+  .ql-toolbar.ql-snow {
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center;
+    gap: 2px;
+    flex-wrap: nowrap;
+  }
+
+  .ql-toolbar.ql-snow .ql-formats {
+    margin-right: 4px !important;
+    display: flex;
+    align-items: center;
+    gap: 1px;
+  }
+
+  .ql-toolbar.ql-snow button {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 6px !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+  }
+
+  .ql-toolbar.ql-snow button:hover {
+    background: var(--bg-overlay) !important;
+  }
+
+  .ql-toolbar.ql-snow button.ql-active {
+    background: var(--accent) !important;
+    color: var(--bg-deep) !important;
+  }
+
+  .ql-toolbar.ql-snow button .ql-stroke {
+    stroke: var(--text-dim) !important;
+  }
+  .ql-toolbar.ql-snow button:hover .ql-stroke {
+    stroke: var(--accent) !important;
+  }
+  .ql-toolbar.ql-snow button.ql-active .ql-stroke {
+    stroke: var(--bg-deep) !important;
+  }
+
+  .ql-toolbar.ql-snow button .ql-fill {
+    fill: var(--text-dim) !important;
+  }
+  .ql-toolbar.ql-snow button:hover .ql-fill {
+    fill: var(--accent) !important;
+  }
+  .ql-toolbar.ql-snow button.ql-active .ql-fill {
+    fill: var(--bg-deep) !important;
+  }
+
+  .ql-toolbar.ql-snow .ql-picker {
+    color: var(--text-dim) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 6px !important;
+    height: 32px !important;
+    padding: 0 6px !important;
+    font-size: 12px !important;
+  }
+  .ql-toolbar.ql-snow .ql-picker:hover {
+    color: var(--accent) !important;
+    border-color: var(--accent) !important;
+  }
+  .ql-toolbar.ql-snow .ql-picker.ql-expanded .ql-picker-options {
+    background: var(--bg-surface) !important;
+    border: 1px solid var(--border-hi) !important;
+    border-radius: 6px !important;
+    padding: 4px !important;
+  }
+  .ql-toolbar.ql-snow .ql-picker.ql-expanded .ql-picker-options .ql-picker-item {
+    color: var(--text) !important;
+    padding: 4px 8px !important;
+    border-radius: 4px !important;
+  }
+  .ql-toolbar.ql-snow .ql-picker.ql-expanded .ql-picker-options .ql-picker-item:hover {
+    background: var(--bg-overlay) !important;
+    color: var(--accent) !important;
+  }
+  .ql-toolbar.ql-snow .ql-picker-label .ql-stroke {
+    stroke: var(--text-dim) !important;
+  }
+
+  .toolbar-right {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .mode-btn {
+    padding: 4px 12px;
+    height: 30px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-surface);
+    color: var(--text-muted);
+    font-size: 12px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .mode-btn:hover { background: var(--bg-overlay); color: var(--text); }
+  .mode-btn.active {
+    background: var(--accent);
+    color: var(--bg-deep);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* ====== EDITOR AREA ====== */
+  #editor-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-base);
+  }
+
+  /* Quill container */
+  .ql-container.ql-snow {
+    border: none !important;
+    flex: 1;
+    overflow: hidden;
+    font-family: var(--font-sans) !important;
+    font-size: 15px !important;
+    color: var(--text) !important;
+  }
+
+  .ql-editor {
+    padding: 24px 40px !important;
+    line-height: 1.8 !important;
+    color: var(--text) !important;
+    overflow-y: auto !important;
+  }
+
+  .ql-editor::-webkit-scrollbar { width: 8px; }
+  .ql-editor::-webkit-scrollbar-track { background: transparent; }
+  .ql-editor::-webkit-scrollbar-thumb {
+    background: var(--bg-overlay);
+    border-radius: 4px;
+  }
+
+  /* Quill placeholder */
+  .ql-editor.ql-blank::before {
+    color: var(--text-muted) !important;
+    font-style: normal !important;
+    left: 40px !important;
+  }
+
+  /* ====== WYSIWYG CONTENT STYLES ====== */
+  .ql-editor h1 {
+    font-size: 2em !important;
+    font-weight: 800 !important;
+    color: var(--accent) !important;
+    margin: 0.4em 0 0.2em !important;
+  }
+  .ql-editor h2 {
+    font-size: 1.5em !important;
+    font-weight: 700 !important;
+    color: var(--accent) !important;
+    margin: 0.6em 0 0.2em !important;
+    padding-bottom: 0.1em;
+    border-bottom: 1px solid var(--border);
+  }
+  .ql-editor h3 {
+    font-size: 1.25em !important;
+    font-weight: 600 !important;
+    color: var(--purple) !important;
+    margin: 0.5em 0 0.2em !important;
+  }
+  .ql-editor p {
+    margin: 0.3em 0 !important;
+  }
+  .ql-editor strong { color: #fff !important; }
+  .ql-editor em { color: var(--yellow) !important; }
+  .ql-editor s { color: var(--text-muted) !important; }
+
+  .ql-editor a {
+    color: var(--accent) !important;
+    text-decoration: underline !important;
+  }
+
+  .ql-editor blockquote {
+    border-left: 4px solid var(--purple) !important;
+    background: rgba(203,166,247,0.06) !important;
+    padding: 8px 16px !important;
+    margin: 0.5em 0 !important;
+    border-radius: 0 var(--radius) var(--radius) 0 !important;
+    color: var(--text-dim) !important;
+  }
+
+  .ql-editor pre {
+    background: #1a1a2e !important;
+    color: var(--yellow) !important;
+    border: 1px solid #2e2e48 !important;
+    border-radius: var(--radius) !important;
+    padding: 14px 18px !important;
+    font-family: var(--font-mono) !important;
+    font-size: 13px !important;
+    margin: 0.5em 0 !important;
+  }
+
+  .ql-editor code,
+  .ql-editor pre.ql-syntax {
+    background: #1a1a2e !important;
+    color: var(--yellow) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 13px !important;
+    border-radius: 4px !important;
+  }
+
+  .ql-editor ul > li::before {
+    color: var(--accent) !important;
+  }
+  .ql-editor ol > li::before {
+    color: var(--accent) !important;
+  }
+
+  .ql-editor hr {
+    border: none !important;
+    height: 1px !important;
+    background: linear-gradient(90deg, transparent, var(--border-hi), transparent) !important;
+    margin: 1em 0 !important;
+  }
+
+  .ql-editor img {
+    max-width: 100%;
+    border-radius: var(--radius);
+  }
+
+  /* ====== RAW MARKDOWN VIEW ====== */
+  #raw-view {
+    display: none;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  #raw-view textarea {
+    width: 100%;
+    height: 100%;
+    padding: 24px 40px;
+    background: var(--bg-base);
+    color: var(--text);
+    border: none;
+    outline: none;
+    resize: none;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.7;
+    overflow-y: auto;
+  }
+
+  #raw-view textarea::-webkit-scrollbar { width: 8px; }
+  #raw-view textarea::-webkit-scrollbar-track { background: transparent; }
+  #raw-view textarea::-webkit-scrollbar-thumb {
+    background: var(--bg-overlay);
+    border-radius: 4px;
+  }
+
+  /* ====== STATUS BAR ====== */
+  #statusbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 4px 16px;
+    background: var(--bg-base);
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    height: 26px;
+    user-select: none;
+  }
+  #statusbar .right {
+    margin-left: auto;
+    display: flex;
+    gap: 12px;
+  }
+  .dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- TOOLBAR -->
+  <div id="toolbar">
+    <span class="brand">◆ MarkRust</span>
+    <div class="sep"></div>
+    <div id="quill-toolbar"></div>
+    <div class="toolbar-right">
+      <button class="mode-btn active" id="btn-wysiwyg" onclick="setMode('wysiwyg')">✦ WYSIWYG</button>
+      <button class="mode-btn" id="btn-markdown" onclick="setMode('markdown')">⟨/⟩ Markdown</button>
+    </div>
+  </div>
+
+  <!-- WYSIWYG EDITOR -->
+  <div id="editor-wrap">
+    <div id="editor"></div>
+  </div>
+
+  <!-- RAW MARKDOWN VIEW -->
+  <div id="raw-view">
+    <textarea id="raw-textarea" placeholder="Raw Markdown..."></textarea>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div id="statusbar">
+    <span id="stat-words">Words: 0</span>
+    <span id="stat-chars">Chars: 0</span>
+    <div class="right">
+      <span>UTF-8</span>
+      <span>Markdown</span>
+      <span><span class="dot"></span>Ready</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ====== QUILL SETUP ======
+  const toolbarOptions = [
+    [{ 'header': [1, 2, 3, false] }],
+    ['bold', 'italic', 'underline', 'strike'],
+    [{ 'color': [] }, { 'background': [] }],
+    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+    ['blockquote', 'code-block'],
+    ['link', 'image'],
+    ['clean']
+  ];
+
+  const quill = new Quill('#editor', {
+    modules: {
+      toolbar: {
+        container: toolbarOptions,
+        handlers: {}
+      }
+    },
+    theme: 'snow',
+    placeholder: 'Mulai mengetik di sini... (WYSIWYG mode)'
+  });
+
+  // Pindahkan toolbar Quill ke dalam toolbar kita
+  const quillToolbar = document.querySelector('.ql-toolbar');
+  document.getElementById('quill-toolbar').appendChild(quillToolbar);
+
+  // ====== TURNDOWN (HTML → Markdown) ======
+  const turndownService = new TurndownService({
+    headingStyle: 'atx',
+    codeBlockStyle: 'fenced',
+    emDelimiter: '*',
+    bulletListMarker: '-'
+  });
+
+  // ====== DEFAULT CONTENT ======
+  const defaultMarkdown = `# Selamat Datang di MarkRust ✨
+
+Ini adalah **WYSIWYG Markdown Editor** yang dibuat dengan *Rust* + *Tauri*.
+
+## Cara Pakai
+
+Ketik langsung di area editor ini. Semua formatting **langsung terlihat** saat kamu mengetik — tidak perlu split view!
+
+### Fitur
+
+- **Bold**, *italic*, ~~strikethrough~~ langsung terlihat
+- Heading dengan warna berbeda
+- Bullet dan numbered list
+- Blockquote dengan border ungu
+- Code block dengan syntax style
+- Link dan gambar
+
+### Contoh Code
+
+\`\`\`
+fn main() {
+    println!("Hello, MarkRust!");
+}
+\`\`\`
+
+> "Simplicity is the ultimate sophistication."
+> — Leonardo da Vinci
+
+---
+
+Coba klik tombol **⟨/⟩ Markdown** di kanan atas untuk melihat raw markdown-nya! 🚀
+`;
+
+  // Load default content
+  quill.root.innerHTML = marked.parse(defaultMarkdown);
+
+  // ====== MODE SWITCHING ======
+  let currentMode = 'wysiwyg';
+
+  function setMode(mode) {
+    if (mode === currentMode) return;
+
+    if (mode === 'markdown') {
+      // WYSIWYG → Markdown: convert HTML ke Markdown
+      const html = quill.root.innerHTML;
+      const md = turndownService.turndown(html);
+      document.getElementById('raw-textarea').value = md;
+
+      document.getElementById('editor-wrap').style.display = 'none';
+      document.getElementById('raw-view').style.display = 'flex';
+    } else {
+      // Markdown → WYSIWYG: convert Markdown ke HTML
+      const md = document.getElementById('raw-textarea').value;
+      quill.root.innerHTML = marked.parse(md);
+
+      document.getElementById('raw-view').style.display = 'none';
+      document.getElementById('editor-wrap').style.display = 'flex';
+    }
+
+    currentMode = mode;
+    document.getElementById('btn-wysiwyg').classList.toggle('active', mode === 'wysiwyg');
+    document.getElementById('btn-markdown').classList.toggle('active', mode === 'markdown');
+    updateStats();
+  }
+
+  // ====== STATS ======
+  function updateStats() {
+    let text = '';
+    if (currentMode === 'wysiwyg') {
+      text = quill.getText();
+    } else {
+      text = document.getElementById('raw-textarea').value;
+    }
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    const chars = text.length;
+    document.getElementById('stat-words').textContent = `Words: ${words}`;
+    document.getElementById('stat-chars').textContent = `Chars: ${chars}`;
+  }
+
+  quill.on('text-change', updateStats);
+  document.getElementById('raw-textarea').addEventListener('input', updateStats);
+
+  // ====== INIT ======
+  updateStats();
+</script>
+
+</body>
+</html>

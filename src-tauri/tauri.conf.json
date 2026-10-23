@@ -1,0 +1,26 @@
+{
+  "productName": "MarkRust",
+  "version": "0.1.0",
+  "identifier": "com.markrust.app",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "MarkRust",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 700,
+        "minHeight": 500,
+        "resizable": true,
+        "decorations": true,
+        "transparent": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  }
+}
