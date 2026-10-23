@@ -23,14 +23,13 @@
     --text-dim:   #a6adc8;
     --text-muted: #6c7086;
     --accent:     #89b4fa;
-    --green:      #a6e3a1;
     --yellow:     #f9e2af;
-    --pink:       #f38ba8;
     --purple:     #cba6f7;
-    --peach:      #fab387;
     --code-bg:    #15152a;
     --code-text:  #d6deeb;
     --radius:     8px;
+    /* Lebar maksimum teks (ukuran baca). 40rem = 640px, cukup untuk ~80 kolom kode. */
+    --measure:    40rem;
     --font-sans:  'Inter', 'Segoe UI', system-ui, sans-serif;
     --font-mono:  'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
   }
@@ -46,24 +45,29 @@
   #app {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: 100%;
   }
 
-  /* ====== TOOLBAR ====== */
+  /* ====== TOOLBAR ======
+     min-height (bukan height) + wrap: kalau jendela dipersempit, kontrol
+     Quill pindah ke baris kedua. Tanpa ini toolbar meluber dan tombol mode
+     terdorong keluar layar, sehingga tidak bisa diklik lagi. */
   #toolbar {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 4px;
     padding: 6px 12px;
     background: var(--bg-base);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
-    height: 46px;
+    min-height: 46px;
     -webkit-app-region: drag;
   }
   #toolbar > * { -webkit-app-region: no-drag; }
 
   .brand {
+    flex: none;
     font-weight: 700;
     font-size: 14px;
     color: var(--accent);
@@ -71,10 +75,18 @@
   }
 
   .sep {
+    flex: none;
     width: 1px;
     height: 22px;
     background: var(--border);
     margin: 0 6px;
+  }
+
+  /* Wadah toolbar Quill: boleh mengecil, isinya yang membungkus.
+     Tanpa min-width:0, flex item tidak mau menyusut di bawah ukuran isinya. */
+  #quill-toolbar {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   /* Override Quill toolbar */
@@ -84,11 +96,12 @@
     padding: 0 !important;
     display: flex !important;
     align-items: center;
+    flex-wrap: wrap !important;
     gap: 2px;
-    flex-wrap: nowrap;
   }
 
   .ql-toolbar.ql-snow .ql-formats {
+    flex: none;
     margin-right: 4px !important;
     display: flex;
     align-items: center;
@@ -166,6 +179,7 @@
   }
 
   .toolbar-right {
+    flex: none;
     margin-left: auto;
     display: flex;
     gap: 4px;
@@ -185,6 +199,10 @@
     transition: all 0.15s;
   }
   .mode-btn:hover { background: var(--bg-overlay); color: var(--text); }
+  .mode-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
   .mode-btn.active {
     background: var(--accent);
     color: var(--bg-deep);
@@ -211,11 +229,16 @@
     color: var(--text) !important;
   }
 
+  /* Gutter kiri/kanan dihitung supaya teks terpusat pada --measure.
+     Mengatur padding (bukan max-width pada anak-anaknya) menjaga placeholder,
+     seleksi, dan elemen lebar penuh tetap sejajar. */
   .ql-editor {
-    padding: 24px 40px !important;
+    padding: 24px max(40px, calc((100% - var(--measure)) / 2)) !important;
     line-height: 1.8 !important;
     color: var(--text) !important;
     overflow-y: auto !important;
+    /* Cegah teks bergeser saat scrollbar muncul/hilang. */
+    scrollbar-gutter: stable;
   }
 
   .ql-editor::-webkit-scrollbar { width: 8px; }
@@ -225,11 +248,14 @@
     border-radius: 4px;
   }
 
-  /* Quill placeholder */
+  /* Quill placeholder — harus sejajar dengan teks, bukan dengan tepi jendela. */
   .ql-editor.ql-blank::before {
     color: var(--text-muted) !important;
     font-style: normal !important;
-    left: 40px !important;
+    left: max(40px, calc((100% - var(--measure)) / 2)) !important;
+    right: auto !important;
+    width: var(--measure) !important;
+    max-width: calc(100% - 80px) !important;
   }
 
   /* ====== WYSIWYG CONTENT STYLES ====== */
@@ -367,10 +393,11 @@
     overflow: hidden;
   }
 
+  /* Gutter yang sama dengan .ql-editor supaya teks tidak melompat saat ganti mode. */
   #raw-view textarea {
     width: 100%;
     height: 100%;
-    padding: 24px 40px;
+    padding: 24px max(40px, calc((100% - var(--measure)) / 2));
     background: var(--bg-base);
     color: var(--text);
     border: none;
@@ -380,7 +407,10 @@
     font-size: 14px;
     line-height: 1.7;
     overflow-y: auto;
-    white-space: pre;
+    /* pre-wrap: baris panjang membungkus. 'pre' memaksa scroll horizontal. */
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    scrollbar-gutter: stable;
     tab-size: 2;
   }
 
@@ -409,14 +439,6 @@
     margin-left: auto;
     display: flex;
     gap: 12px;
-  }
-  .dot {
-    display: inline-block;
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--green);
-    margin-right: 4px;
-    vertical-align: middle;
   }
 </style>
 </head>
@@ -449,9 +471,7 @@
     <span id="stat-words">Words: 0</span>
     <span id="stat-chars">Chars: 0</span>
     <div class="right">
-      <span>UTF-8</span>
-      <span>Markdown</span>
-      <span><span class="dot"></span>Ready</span>
+      <span id="stat-mode">WYSIWYG</span>
     </div>
   </div>
 </div>

@@ -504,6 +504,7 @@
   var textarea = document.getElementById('raw-textarea');
   var btnWysiwyg = document.getElementById('btn-wysiwyg');
   var btnMarkdown = document.getElementById('btn-markdown');
+  var statMode = document.getElementById('stat-mode');
   var currentMode = 'wysiwyg';
 
   function loadMarkdownIntoQuill(md) {
@@ -531,6 +532,7 @@
     currentMode = mode;
     btnWysiwyg.classList.toggle('active', mode === 'wysiwyg');
     btnMarkdown.classList.toggle('active', mode === 'markdown');
+    statMode.textContent = mode === 'wysiwyg' ? 'WYSIWYG' : 'Markdown';
     updateStats();
   }
 
