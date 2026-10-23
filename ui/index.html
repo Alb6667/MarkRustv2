@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
 <title>MarkRust</title>
 
 <!-- Semua library di-vendoring lokal: aplikasi tetap berfungsi offline. -->
@@ -13,19 +14,25 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   :root {
-    --bg-deep:    #181825;
-    --bg-base:    #1e1e2e;
-    --bg-surface: #252538;
-    --bg-overlay: #313145;
-    --border:     #3b3b54;
-    --border-hi:  #585878;
+    /* Palet Catppuccin Mochi yang disusun sebagai tangga elevasi, bukan
+       kumpulan warna lepas: crust < base < surface < overlay.
+       Rasio kontras teks terhadap --bg-base sudah diukur:
+       --text 11.3:1, --text-dim 7.4:1, --text-muted 6.3:1
+       (batas WCAG AA untuk teks kecil adalah 4.5:1). */
+    --bg-deep:    #11111b;  /* crust    — paling luar */
+    --bg-base:    #1e1e2e;  /* base     — editor, toolbar, status bar */
+    --bg-surface: #313244;  /* surface0 — kontrol terangkat, hover */
+    --bg-overlay: #45475a;  /* surface1 — hover yang lebih tinggi */
+    --border:     #313244;  /* surface0 — pemisah struktural */
+    --border-hi:  #6c7086;  /* overlay0 — tepi kontrol interaktif (3.4:1) */
     --text:       #cdd6f4;
     --text-dim:   #a6adc8;
-    --text-muted: #6c7086;
+    --text-muted: #98a0bb;
     --accent:     #89b4fa;
+    --accent-tint: rgba(137, 180, 250, 0.20);
     --yellow:     #f9e2af;
     --purple:     #cba6f7;
-    --code-bg:    #15152a;
+    --code-bg:    #181825;  /* mantle   — blok kode, lebih gelap dari base */
     --code-text:  #d6deeb;
     --radius:     8px;
     /* Lebar maksimum teks (ukuran baca). 40rem = 640px, cukup untuk ~80 kolom kode. */
@@ -40,6 +47,13 @@
     color: var(--text);
     font-family: var(--font-sans);
     overflow: hidden;
+    /* Membuat kontrol native (dropdown <select> bahasa, scrollbar) ikut gelap. */
+    color-scheme: dark;
+  }
+
+  ::selection {
+    background: rgba(137, 180, 250, 0.28);
+    color: #fff;
   }
 
   #app {
@@ -100,14 +114,34 @@
     gap: 2px;
   }
 
+  /* Kelompok kontrol (Heading | B I U S | warna | list | ...).
+     Diberi pemisah tipis supaya batas kelompok terbaca. Sebelumnya kelompok
+     hanya dipisahkan jarak 4px, sehingga semua tombol tampak sebagai satu
+     baris yang rata dan sulit dipindai. */
   .ql-toolbar.ql-snow .ql-formats {
     flex: none;
-    margin-right: 4px !important;
+    margin-right: 0 !important;
     display: flex;
     align-items: center;
-    gap: 1px;
+    gap: 2px;
+    position: relative;
+  }
+  .ql-toolbar.ql-snow .ql-formats + .ql-formats {
+    padding-left: 7px;
+    margin-left: 3px;
+  }
+  .ql-toolbar.ql-snow .ql-formats + .ql-formats::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1px;
+    height: 18px;
+    background: var(--border);
   }
 
+  /* Tombol format: Bold, Italic, Underline, Strike, list, quote, code, ... */
   .ql-toolbar.ql-snow button {
     width: 32px !important;
     height: 32px !important;
@@ -116,37 +150,50 @@
     align-items: center;
     justify-content: center;
     padding: 0 !important;
+    transition: background-color 0.12s ease;
   }
-
   .ql-toolbar.ql-snow button:hover {
-    background: var(--bg-overlay) !important;
+    background: var(--bg-surface) !important;
+  }
+  .ql-toolbar.ql-snow button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
   }
 
+  /* Keadaan aktif: tinta aksen + ikon aksen, bukan blok biru penuh.
+     Beberapa toggle bisa menyala bersamaan (mis. Bold + Italic), dan blok
+     biru solid membuat barisnya berat. Latar #333c57 = 1.50:1 terhadap
+     base, ikon aksen di atasnya 5.2:1 — tetap jelas terbaca. */
   .ql-toolbar.ql-snow button.ql-active {
-    background: var(--accent) !important;
-    color: var(--bg-deep) !important;
+    background: var(--accent-tint) !important;
+    box-shadow: inset 0 0 0 1px rgba(137, 180, 250, 0.35);
+  }
+  .ql-toolbar.ql-snow button.ql-active:hover {
+    background: rgba(137, 180, 250, 0.28) !important;
   }
 
   .ql-toolbar.ql-snow button .ql-stroke {
     stroke: var(--text-dim) !important;
   }
   .ql-toolbar.ql-snow button:hover .ql-stroke {
-    stroke: var(--accent) !important;
+    stroke: var(--text) !important;
   }
   .ql-toolbar.ql-snow button.ql-active .ql-stroke {
-    stroke: var(--bg-deep) !important;
+    stroke: var(--accent) !important;
   }
 
   .ql-toolbar.ql-snow button .ql-fill {
     fill: var(--text-dim) !important;
   }
   .ql-toolbar.ql-snow button:hover .ql-fill {
-    fill: var(--accent) !important;
+    fill: var(--text) !important;
   }
   .ql-toolbar.ql-snow button.ql-active .ql-fill {
-    fill: var(--bg-deep) !important;
+    fill: var(--accent) !important;
   }
 
+  /* Picker (Heading, warna teks, warna latar) — diberi tinggi dan radius
+     yang sama dengan tombol agar bobot visualnya konsisten. */
   .ql-toolbar.ql-snow .ql-picker {
     color: var(--text-dim) !important;
     border: 1px solid var(--border) !important;
@@ -154,16 +201,25 @@
     height: 32px !important;
     padding: 0 6px !important;
     font-size: 12px !important;
+    display: inline-flex !important;
+    align-items: center;
+    transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
   }
   .ql-toolbar.ql-snow .ql-picker:hover {
-    color: var(--accent) !important;
-    border-color: var(--accent) !important;
+    color: var(--text) !important;
+    background: var(--bg-surface) !important;
+    border-color: var(--border-hi) !important;
+  }
+  .ql-toolbar.ql-snow .ql-picker:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
   }
   .ql-toolbar.ql-snow .ql-picker.ql-expanded .ql-picker-options {
     background: var(--bg-surface) !important;
     border: 1px solid var(--border-hi) !important;
     border-radius: 6px !important;
     padding: 4px !important;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
   }
   .ql-toolbar.ql-snow .ql-picker.ql-expanded .ql-picker-options .ql-picker-item {
     color: var(--text) !important;
@@ -177,6 +233,20 @@
   .ql-toolbar.ql-snow .ql-picker-label .ql-stroke {
     stroke: var(--text-dim) !important;
   }
+  .ql-toolbar.ql-snow .ql-picker:hover .ql-picker-label .ql-stroke {
+    stroke: var(--text) !important;
+  }
+
+  /* Ikon "ember cat" pada picker warna latar memakai .ql-fill, yang oleh
+     Quill diwarnai #444 — nyaris tak terlihat di toolbar gelap.
+     Sengaja TANPA !important: kalau Quill menetapkan warna terpilih lewat
+     style inline, warna itu tetap menang. */
+  .ql-toolbar.ql-snow .ql-picker .ql-fill {
+    fill: var(--text-dim);
+  }
+  .ql-toolbar.ql-snow .ql-picker:hover .ql-fill {
+    fill: var(--text);
+  }
 
   .toolbar-right {
     flex: none;
@@ -189,7 +259,9 @@
   .mode-btn {
     padding: 4px 12px;
     height: 30px;
-    border: 1px solid var(--border);
+    /* --border-hi (3.4:1): batas kontrol interaktif harus terbaca,
+       sedangkan --border dipakai untuk pemisah struktural yang halus. */
+    border: 1px solid var(--border-hi);
     border-radius: 6px;
     background: var(--bg-surface);
     color: var(--text-muted);
@@ -241,12 +313,23 @@
     scrollbar-gutter: stable;
   }
 
-  .ql-editor::-webkit-scrollbar { width: 8px; }
-  .ql-editor::-webkit-scrollbar-track { background: transparent; }
-  .ql-editor::-webkit-scrollbar-thumb {
+  /* Scrollbar: properti standar (Firefox) sekaligus pseudo-element WebKit. */
+  .ql-editor,
+  #raw-view textarea {
+    scrollbar-width: thin;
+    scrollbar-color: var(--bg-overlay) transparent;
+  }
+  .ql-editor::-webkit-scrollbar,
+  #raw-view textarea::-webkit-scrollbar { width: 8px; }
+  .ql-editor::-webkit-scrollbar-track,
+  #raw-view textarea::-webkit-scrollbar-track { background: transparent; }
+  .ql-editor::-webkit-scrollbar-thumb,
+  #raw-view textarea::-webkit-scrollbar-thumb {
     background: var(--bg-overlay);
     border-radius: 4px;
   }
+  .ql-editor::-webkit-scrollbar-thumb:hover,
+  #raw-view textarea::-webkit-scrollbar-thumb:hover { background: var(--border-hi); }
 
   /* Quill placeholder — harus sejajar dengan teks, bukan dengan tepi jendela. */
   .ql-editor.ql-blank::before {
@@ -329,7 +412,7 @@
     position: relative;
     background: var(--code-bg) !important;
     color: var(--code-text) !important;
-    border: 1px solid #2e2e48 !important;
+    border: 1px solid var(--border) !important;
     border-radius: var(--radius) !important;
     padding: 30px 18px 14px !important;
     margin: 0.5em 0 !important;
@@ -414,12 +497,7 @@
     tab-size: 2;
   }
 
-  #raw-view textarea::-webkit-scrollbar { width: 8px; }
-  #raw-view textarea::-webkit-scrollbar-track { background: transparent; }
-  #raw-view textarea::-webkit-scrollbar-thumb {
-    background: var(--bg-overlay);
-    border-radius: 4px;
-  }
+  #raw-view textarea::placeholder { color: var(--text-muted); }
 
   /* ====== STATUS BAR ====== */
   #statusbar {
