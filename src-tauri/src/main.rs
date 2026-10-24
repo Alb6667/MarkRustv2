@@ -9,8 +9,10 @@ use tauri::Emitter;
 /// memori (Delta Quill), jadi berkas raksasa harus ditolak lebih awal.
 const MAX_DOCUMENT_BYTES: u64 = 10 * 1024 * 1024;
 
-/// Path hanya boleh absolut dan berasal dari dialog pilihan pengguna.
-/// Tidak ada akses filesystem liar dari webview di luar dua perintah ini.
+/// Normalnya path datang dari dialog pilihan pengguna, tetapi webview tidak
+/// bisa dibuktikan sebagai sumbernya. Karena itu batasi juga: wajib absolut
+/// dan berekstensi teks/Markdown, supaya penyalahgunaan tidak bisa membaca
+/// atau menimpa berkas sembarangan (mis. konfigurasi sistem).
 fn document_path(raw: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(raw);
     if path.as_os_str().is_empty() {
@@ -18,6 +20,14 @@ fn document_path(raw: &str) -> Result<PathBuf, String> {
     }
     if !path.is_absolute() {
         return Err("Path berkas harus absolut".into());
+    }
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if !matches!(ext.as_str(), "md" | "markdown" | "txt" | "mdown" | "mkd") {
+        return Err("Hanya berkas .md, .markdown, atau .txt yang didukung".into());
     }
     Ok(path)
 }

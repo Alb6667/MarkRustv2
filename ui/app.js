@@ -215,6 +215,9 @@ function boot() {
   }
 
   function markDirty() {
+    // Dijaga supaya IPC setTitle tidak dikirim pada setiap ketikan setelah
+    // dokumen sudah berstatus kotor.
+    if (dirty) return;
     dirty = true;
     sbDirty.hidden = false;
     refreshTitle();
@@ -367,9 +370,12 @@ function boot() {
 
   /** Terapkan dokumen ke mode yang sedang aktif. */
   function applyDocument(md) {
-    if (currentMode === 'markdown') textarea.value = md;
-    else loadMarkdownIntoQuill(md);
-    updateStats();
+    if (currentMode === 'markdown') {
+      textarea.value = md;
+      updateStats();
+    } else {
+      loadMarkdownIntoQuill(md); // sudah memanggil updateStats()
+    }
   }
 
   function pickBrowserFile() {

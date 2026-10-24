@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   basename, isMarkdownFilename, titleFor, openWithTauri, saveWithTauri,
-  confirmDiscard, MARKDOWN_FILTERS, DEFAULT_FILENAME
+  confirmDiscard, MARKDOWN_FILTERS, DEFAULT_FILENAME, ALLOWED_EXTENSIONS
 } from '../ui/core/files.js';
 
 function fakeTauri(opts = {}) {
@@ -101,4 +102,15 @@ test('confirmDiscard memakai dialog native bila tersedia', async () => {
   const t = fakeTauri();
   assert.equal(await confirmDiscard(t), true);
   assert.equal(t.calls[0][0], 'ask');
+});
+
+
+// Validasi path ada di dua bahasa (Rust untuk perintah, JS untuk drag-drop).
+// Kalau salah satu berubah tanpa yang lain, tes ini yang akan mengingatkan.
+test('daftar ekstensi JS identik dengan validasi Rust di main.rs', () => {
+  const rust = fs.readFileSync(new URL('../src-tauri/src/main.rs', import.meta.url), 'utf8');
+  const m = rust.match(/matches!\(ext\.as_str\(\),\s*([^)]*)\)/);
+  assert.ok(m, 'pola matches!(ext.as_str(), ...) tidak ditemukan di main.rs');
+  const fromRust = Array.from(m[1].matchAll(/"([a-z]+)"/g), (x) => x[1]).sort();
+  assert.deepEqual(fromRust, Array.from(ALLOWED_EXTENSIONS).sort());
 });

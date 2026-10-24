@@ -30,8 +30,12 @@ export function basename(path) {
   return (i >= 0 ? s.slice(i + 1) : s) || DEFAULT_FILENAME;
 }
 
+// Daftar ini harus tetap identik dengan `document_path()` di src-tauri/src/main.rs.
+export const ALLOWED_EXTENSIONS = ['md', 'markdown', 'txt', 'mdown', 'mkd'];
+
 export function isMarkdownFilename(name) {
-  return /\.(md|markdown|txt|mdown|mkd)$/i.test(String(name || ''));
+  return new RegExp('\\.(' + ALLOWED_EXTENSIONS.join('|') + ')$', 'i')
+    .test(String(name || ''));
 }
 
 export function titleFor(path, dirty) {

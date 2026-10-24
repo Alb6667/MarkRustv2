@@ -163,10 +163,15 @@ untuk membuka dan unduhan Blob untuk menyimpan.
 Frontend **tidak** diberi akses filesystem umum. Hanya dua perintah Rust yang
 menyentuh disk:
 
-- `read_document(path)` — menolak path relatif dan berkas di atas 10 MB.
+- `read_document(path)` — menolak path relatif, ekstensi selain teks/Markdown,
+  dan berkas di atas 10 MB.
 - `write_document(path, contents)` — menulis ke berkas sementara di direktori
   yang sama lalu `rename`, sehingga pembaca tidak pernah melihat dokumen
   setengah jadi.
+
+Daftar ekstensi yang diizinkan dijaga tetap identik antara Rust dan JavaScript
+oleh sebuah tes (`tests/files.test.js`), karena validasi terjadi di dua tempat:
+perintah Rust dan handler drag-drop di frontend.
 
 Dialog pemilih berkas memakai `tauri-plugin-dialog`. API vanilla JS tersedia
 lewat `withGlobalTauri: true`, jadi tetap **tanpa bundler dan tanpa Node**
