@@ -122,7 +122,9 @@ Pemblokiran dilakukan berlapis, karena satu titik saja tidak cukup:
    dibuang. CSS dibuang per-deklarasi supaya warna teks/latar tetap ikut
    round-trip.
 3. **Blot gambar aman.** Menggantikan blot `image` bawaan Quill sebagai
-   pengaman kedua (misalnya untuk gambar yang disisipkan lewat paste).
+   pengaman kedua (misalnya untuk gambar yang disisipkan lewat paste). URL yang
+   tertahan tidak pernah diberikan ke `super.create()`; placeholder dipakai
+   sejak konstruksi agar tidak ada penulisan `src` jaringan walau sesaat.
    `value()` membaca `data-mr-src`, sehingga **Delta dan berkas `.md` tetap
    berisi URL asli** — tidak ada data yang hilang.
 4. **Allow-list per dokumen.** URL dimuat hanya setelah pengguna menekan

@@ -1,6 +1,6 @@
 # Laporan status & handoff MarkRust
 
-Tanggal: 24 Oktober 2026. Branch: `arena/bcbf3e21-markrust`.
+Tanggal: 24 Oktober 2026. Branch: `arena/cb632534-markrustv2`.
 Dokumen ini adalah titik masuk untuk melanjutkan pekerjaan; baca bersama
 [ROADMAP.md](ROADMAP.md) dan [DESKTOP-TEST-CHECKLIST.md](DESKTOP-TEST-CHECKLIST.md).
 
@@ -8,9 +8,10 @@ Dokumen ini adalah titik masuk untuk melanjutkan pekerjaan; baca bersama
 
 Editor dan recovery native sudah diimplementasikan. M1a–M1c memiliki tes otomatis
 serta build/test CI lintas OS yang hijau pada commit `0ecfd7a`. Audit lifecycle
-lanjutan menambah pengaman operasi async dan membawa jumlah tes JS menjadi
-**144 lulus**. CI audit `40074055940` pada commit `b931d22` juga lulus: Node serta
-build/test Rust Linux, Windows, macOS.
+lanjutan menambah pengaman operasi async. Lanjutan sesi ini menambahkan dua tes
+race drop dan satu tes penulisan `src` gambar sesaat, sehingga menjadi **147 tes
+lulus secara lokal**. CI audit `40074055940` pada commit `b931d22` juga lulus:
+Node serta build/test Rust Linux, Windows, macOS.
 
 **Belum siap dinyatakan rilis publik. M1 belum ditutup secara keseluruhan, M2
 belum dijalankan di webview desktop nyata.** Jangan menyamakan build CI dengan
@@ -41,13 +42,13 @@ Diperbaiki:
 - Drop memeriksa generasi/revisi sebelum dan sesudah konfirmasi.
 - Pemulihan tidak boleh berjalan di atas dokumen kotor.
 
-Tes baru secara langsung meliputi open tertunda, konfirmasi Baru tertunda, dan
-restore pada dokumen kotor. Guard drop telah dipasang tetapi race drop belum
-memiliki tes otomatis tersendiri; masukkan ke uji F07.
+Tes secara langsung meliputi open tertunda, konfirmasi Baru tertunda, restore
+pada dokumen kotor, serta drop saat pembacaan dan konfirmasi tertunda. Kasus
+native F07 tetap perlu dijalankan; tes jsdom bukan pengganti uji webview.
 
 ## Verifikasi yang tersedia
 
-- Lokal: `npm test` → **144 tests, 144 pass, 0 fail**.
+- Lokal: `npm test` → **147 tests, 147 pass, 0 fail**.
 - Tidak ada toolchain Rust lokal; Rust diverifikasi lewat GitHub Actions.
 - CI M1c `40073225635`, commit `0ecfd7a`: Node + build/test Rust Linux,
   Windows, macOS lulus. Bundel rilis tidak berjalan pada push biasa.
@@ -84,9 +85,11 @@ runtime native dalam sesi sandbox ini. Jangan menandai M1/M2 selesai dulu.
 
 `img-src` masih mengizinkan `https:`; pertahanan sekarang di aplikasi, bukan
 CSP penuh. Jangan mengklaim nol request hanya dari tes DOM jsdom. Audit dengan
-network inspector pada Markdown dan clipboard asli. Khususnya periksa urutan
-pembuatan blot (`super.create(value)` dapat menyetel URL asli sebelum placeholder)
-dan parsing HTML sementara. Jika fetch teramati, perlakukan sebagai blocker.
+network inspector pada Markdown dan clipboard asli tetap diperlukan. Risiko
+urutan pembuatan blot sudah ditutup: URL tertahan tidak lagi diberikan ke
+`super.create()` dan tes memantau seluruh penulisan `src`, bukan hanya DOM akhir.
+Tetap periksa parsing HTML sementara di webview nyata; jika fetch teramati,
+perlakukan sebagai blocker.
 
 Desain lanjutan: downloader native terbatas dengan validasi skema/DNS/IP,
 redirect, ukuran/timeouts, format gambar aman; tidak membuka HTTP client umum
@@ -126,7 +129,7 @@ perbaikan blocker data/security.
 
 ## Cara melanjutkan
 
-1. Pastikan branch tetap `arena/bcbf3e21-markrust`; cek `git status` dan laporan ini.
+1. Pastikan branch tetap `arena/cb632534-markrustv2`; cek `git status` dan laporan ini.
 2. `npm ci && npm test` untuk baseline JS. Rust: di mesin dengan toolchain +
    dependency sistem, jalankan `cargo test --manifest-path src-tauri/Cargo.toml`.
 3. Isi checklist native dengan commit/runtime yang benar. Prioritaskan FAIL

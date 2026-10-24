@@ -520,3 +520,85 @@ test('pemulihan tidak menimpa dokumen yang sedang kotor', async () => {
   assert.equal(await api.restoreDraftIfAny(), false);
   assert.equal(api.getMarkdown(), before);
 });
+
+
+/* ------------------------------------------------------------------------- *
+ * Drag & drop: hasil baca/dialog lama tidak boleh menimpa edit yang lebih baru
+ * ------------------------------------------------------------------------- */
+
+function installDeferredFileReader() {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'FileReader');
+  const readers = [];
+  class DeferredFileReader {
+    readAsText(file) { this.file = file; readers.push(this); }
+    succeed(contents) { this.result = contents; this.onload(); }
+  }
+  Object.defineProperty(globalThis, 'FileReader', {
+    value: DeferredFileReader, writable: true, configurable: true
+  });
+  return {
+    readers,
+    restore() {
+      if (original) Object.defineProperty(globalThis, 'FileReader', original);
+      else delete globalThis.FileReader;
+    }
+  };
+}
+
+function dropFile(file) {
+  const event = new window.Event('drop', { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', { value: { files: [file] } });
+  window.document.dispatchEvent(event);
+  return event;
+}
+
+test('drop dengan pembacaan tertunda tidak menimpa ketikan baru', async () => {
+  nextAskResult = true;
+  await api.newDocument();
+  const deferred = installDeferredFileReader();
+  try {
+    const event = dropFile({ name: 'drop.md' });
+    assert.equal(event.defaultPrevented, true);
+    assert.equal(deferred.readers.length, 1);
+
+    api.quill.insertText(0, 'Ketikan saat drop dibaca', 'user');
+    deferred.readers[0].succeed('# Isi drop lama\n');
+    await new Promise((r) => setTimeout(r, 0));
+
+    assert.match(api.getMarkdown(), /Ketikan saat drop dibaca/);
+    assert.ok(!api.getMarkdown().includes('Isi drop lama'));
+    assert.equal(api.getPath(), null);
+    assert.equal(api.isDirty(), true);
+  } finally {
+    deferred.restore();
+  }
+});
+
+test('drop dengan konfirmasi tertunda tidak membuang edit selama dialog', async () => {
+  nextAskResult = true;
+  await api.newDocument();
+  api.quill.insertText(0, 'Awal', 'user');
+  const deferred = installDeferredFileReader();
+  let release;
+  pendingAsk = new Promise((r) => { release = r; });
+  try {
+    const asksBeforeDrop = asks.length;
+    dropFile({ name: 'drop.md' });
+    deferred.readers[0].succeed('# Isi drop\n');
+    await new Promise((r) => setTimeout(r, 0));
+    assert.ok(asks.length > asksBeforeDrop, 'konfirmasi drop harus sudah dimulai');
+
+    api.quill.insertText(0, 'Terbaru ', 'user');
+    release();
+    await new Promise((r) => setTimeout(r, 0));
+
+    assert.match(api.getMarkdown(), /Terbaru/);
+    assert.ok(!api.getMarkdown().includes('Isi drop'));
+    assert.equal(api.getPath(), null);
+    assert.equal(api.isDirty(), true);
+  } finally {
+    release();
+    pendingAsk = null;
+    deferred.restore();
+  }
+});

@@ -138,6 +138,30 @@ test('normalisasi: TIDAK ada atribut bernilai http(s) saat diblokir', () => {
     'URL asli tetap disimpan di atribut khusus agar tidak hilang');
 });
 
+test('blot tidak pernah meneruskan URL remote sesaat ke src bawaan Quill', () => {
+  resetImagePolicy();
+  const { window, Quill } = getEnv();
+  const proto = window.HTMLImageElement.prototype;
+  const originalSetAttribute = proto.setAttribute;
+  const srcWrites = [];
+  proto.setAttribute = function (name, value) {
+    if (String(name).toLowerCase() === 'src') srcWrites.push(String(value));
+    return originalSetAttribute.call(this, name, value);
+  };
+
+  try {
+    const ImageBlot = Quill.import('formats/image');
+    const node = ImageBlot.create(REMOTE);
+    assert.equal(srcWrites.includes(REMOTE), false,
+      'URL asli tidak boleh ditulis walau hanya sesaat sebelum placeholder');
+    assert.equal(node.getAttribute('src'), IMAGE_PLACEHOLDER);
+    assert.equal(node.getAttribute('data-mr-src'), REMOTE);
+    assert.equal(ImageBlot.value(node), REMOTE);
+  } finally {
+    proto.setAttribute = originalSetAttribute;
+  }
+});
+
 test('render Quill: nol gambar dengan src jaringan saat diblokir', () => {
   resetImagePolicy();
   const q = render('Sebelum\n\n![foto kucing](' + REMOTE + ')\n\nSesudah\n');

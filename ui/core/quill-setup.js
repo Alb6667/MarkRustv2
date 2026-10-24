@@ -54,12 +54,12 @@ export function registerSafeImageBlot(Quill) {
     static tagName = 'IMG';
 
     static create(value) {
-      const node = super.create(value);
       const url = String(value == null ? '' : value);
-      if (shouldBlockRemoteImage(url)) {
-        node.setAttribute('data-mr-src', url);
-        node.setAttribute('src', IMAGE_PLACEHOLDER);
-      }
+      const blocked = shouldBlockRemoteImage(url);
+      // Jangan berikan URL asli kepada blot bawaan: super.create(value) menulis
+      // `src` langsung dan browser dapat mem-fetch sebelum placeholder dipasang.
+      const node = super.create(blocked ? IMAGE_PLACEHOLDER : value);
+      if (blocked) node.setAttribute('data-mr-src', url);
       return node;
     }
 
