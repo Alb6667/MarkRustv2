@@ -7,7 +7,7 @@ use std::{
 };
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use image::{ImageFormat, ImageReaderOptions, Limits};
+use image::{ImageFormat, ImageReader, Limits};
 use reqwest::{
     blocking::{Client, ClientBuilder, Response},
     header::{ACCEPT, CONTENT_TYPE, LOCATION},
@@ -22,13 +22,52 @@ const MAX_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION: u32 = 8192;
 const MAX_DECODED_BYTES: u64 = 128 * 1024 * 1024;
 
+fn public_ipv4(ip: std::net::Ipv4Addr) -> bool {
+    let [a, b, c, _] = ip.octets();
+    // Keep this explicit instead of relying on the still-unstable is_global()
+    // std APIs. Unknown/special ranges fail closed; ordinary public unicast
+    // addresses remain usable.
+    if a == 0 || a >= 224 || a == 10 || a == 127 || (a == 169 && b == 254) ||
+        (a == 172 && (16..=31).contains(&b)) || (a == 192 && b == 168) ||
+        (a == 100 && (64..=127).contains(&b)) || (a == 198 && (b == 18 || b == 19)) {
+        return false;
+    }
+    // IETF assignments, documentation, benchmarking and 6to4-relay ranges.
+    if (a == 192 && b == 0 && (c == 0 || c == 2)) ||
+        (a == 192 && b == 88 && c == 99) || (a == 198 && b == 51 && c == 100) ||
+        (a == 203 && b == 0 && c == 113) {
+        return false;
+    }
+    true
+}
+
+fn public_ipv6(ip: std::net::Ipv6Addr) -> bool {
+    if let Some(v4) = ip.to_ipv4() {
+        return public_ipv4(v4);
+    }
+    let s = ip.segments();
+    // Unspecified/IPv4-compatible, unique-local, link-local and multicast.
+    if (s[0] == 0 && s[1] == 0 && s[2] == 0 && s[3] == 0 && s[4] == 0) ||
+        (s[0] & 0xfe00 == 0xfc00) ||
+        (s[0] & 0xffc0 == 0xfe80) || (s[0] & 0xff00 == 0xff00) {
+        return false;
+    }
+    // Documentation, benchmarking, ORCHID, Teredo, 6to4, NAT64 and discard.
+    // These transitions are deliberately rejected rather than trying to
+    // unwrap every possible embedded address scheme.
+    if (s[0] == 0x2001 && (s[1] == 0x0db8 || s[1] == 0 || s[1] == 2 ||
+        (s[1] & 0xfff0 == 0x10) || (s[1] & 0xfff0 == 0x20))) ||
+        s[0] == 0x2002 || (s[0] == 0x64 && s[1] == 0xff9b) ||
+        (s[0] == 0x100 && s[1] == 0 && s[2] == 0 && s[3] == 0) {
+        return false;
+    }
+    true
+}
+
 fn public_ip(ip: IpAddr) -> bool {
     match ip {
-        IpAddr::V4(v4) => v4.is_global(),
-        IpAddr::V6(v6) => match v6.to_ipv4() {
-            Some(v4) => v4.is_global(),
-            None => v6.is_global(),
-        },
+        IpAddr::V4(v4) => public_ipv4(v4),
+        IpAddr::V6(v6) => public_ipv6(v6),
     }
 }
 
@@ -122,7 +161,7 @@ fn read_limited(reader: impl Read, limit: u64) -> Result<Vec<u8>, String> {
 }
 
 fn validate_image_bytes(bytes: &[u8], content_type: Option<&str>) -> Result<&'static str, String> {
-    let mut reader = ImageReaderOptions::new(Cursor::new(bytes))
+    let mut reader = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
         .map_err(|e| format!("Format gambar tidak dapat dibaca: {e}"))?;
     let format = reader.format();
@@ -206,11 +245,14 @@ mod tests {
             "http://127.0.0.1/a.png", "http://10.0.0.1/a.png", "http://169.254.169.254/meta",
             "http://100.64.0.1/a.png", "http://[::1]/a.png", "http://[fc00::1]/a.png",
             "http://[fe80::1]/a.png", "http://[::ffff:127.0.0.1]/a.png", "//localhost/a.png",
+            "http://[2001:db8::1]/a.png", "http://[2002::1]/a.png", "http://[64:ff9b::7f00:1]/a.png",
+            "http://192.0.2.1/a.png", "http://198.18.0.1/a.png", "http://224.0.0.1/a.png",
         ] {
             assert!(parse_image_url(raw).is_err(), "should reject {raw}");
         }
         assert!(parse_image_url("https://example.com/a.png").is_ok());
         assert!(parse_image_url("https://8.8.8.8/a.png").is_ok());
+        assert!(parse_image_url("https://[2606:4700:4700::1111]/a.png").is_ok());
         assert_eq!(parse_image_url("//example.com/a.png").unwrap().scheme(), "https");
     }
 
