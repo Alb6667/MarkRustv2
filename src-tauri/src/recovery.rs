@@ -10,6 +10,7 @@ struct Session { dir: PathBuf, _lock: File }
 static SESSION: Mutex<Option<Session>> = Mutex::new(None);
 const LIMIT: usize = 12 * 1024 * 1024;
 const KEEP: usize = 5;
+const TOTAL_LIMIT: u64 = 256 * 1024 * 1024;
 
 fn lock_session(dir: &Path) -> Result<Option<Session>, String> {
     let lock = fs::OpenOptions::new().read(true).write(true).create(true)
@@ -61,6 +62,35 @@ fn with_session<T>(app: &tauri::AppHandle, task: impl FnOnce(&Path) -> Result<T,
     }
     task(&state.as_ref().unwrap().dir)
 }
+// Count both legacy and session storage, including crash-left temporary files.
+// Never follow symlinks and never silently skip an unreadable entry.
+fn disk_usage(dir: &Path) -> Result<u64, String> {
+    if !dir.exists() { return Ok(0); }
+    let mut total = 0u64;
+    for entry in fs::read_dir(dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let meta = fs::symlink_metadata(entry.path()).map_err(|e| e.to_string())?;
+        let bytes = if meta.is_dir() { disk_usage(&entry.path())? }
+            else if meta.is_file() { meta.len() } else { 0 };
+        total = total.checked_add(bytes).ok_or("Ukuran recovery tidak valid")?;
+    }
+    Ok(total)
+}
+fn write_budgeted(base: &Path, dir: &Path, contents: &str, limit: u64) -> Result<(), String> {
+    validate(contents)?;
+    // A separate OS lock serializes quota checks + writes across processes.
+    // Session ownership is already held; no code takes locks in reverse order.
+    let lock = fs::OpenOptions::new().read(true).write(true).create(true)
+        .truncate(false).open(base.join("recovery-budget.lock")).map_err(|e| e.to_string())?;
+    lock.lock_exclusive().map_err(|e| e.to_string())?;
+    let usage = disk_usage(&base.join("recovery-v1"))?
+        .checked_add(disk_usage(&base.join("recovery-v2"))?).ok_or("Ukuran recovery tidak valid")?;
+    // Reserve room for the complete new snapshot before pruning our versions.
+    if usage.saturating_add(contents.len() as u64) > limit {
+        return Err("Batas total recovery tercapai. Simpan berkas; cadangan sesi lain tidak dihapus otomatis.".into());
+    }
+    write(dir, contents)
+}
 fn snapshots(dir: &Path) -> Result<Vec<PathBuf>, String> {
     if !dir.exists() { return Ok(vec![]); }
     let mut files = fs::read_dir(dir).map_err(|e| e.to_string())?
@@ -102,7 +132,9 @@ fn write(dir: &Path, contents: &str) -> Result<(), String> {
     if let Err(e) = result { let _ = fs::remove_file(tmp); return Err(e.to_string()); }
     // Prune only after a complete new version is safely written.
     let files = snapshots(dir)?;
-    for old in files.iter().take(files.len().saturating_sub(KEEP)) { let _ = fs::remove_file(old); }
+    for old in files.iter().take(files.len().saturating_sub(KEEP)) {
+        fs::remove_file(old).map_err(|e| format!("Cadangan baru ditulis tetapi cleanup gagal: {e}"))?;
+    }
     Ok(())
 }
 fn read(dir: &Path) -> Result<Option<String>, String> {
@@ -117,7 +149,10 @@ fn read(dir: &Path) -> Result<Option<String>, String> {
 }
 #[tauri::command]
 pub fn write_recovery(app: tauri::AppHandle, contents: String) -> Result<(), String> {
-    with_session(&app, |dir| write(dir, &contents))
+    with_session(&app, |dir| {
+        let base = app.path().app_data_dir().map_err(|e| e.to_string())?;
+        write_budgeted(&base, dir, &contents, TOTAL_LIMIT)
+    })
 }
 #[tauri::command]
 pub fn read_recovery(app: tauri::AppHandle) -> Result<Option<String>, String> {
@@ -164,6 +199,69 @@ mod tests {
         assert!(read(&second.dir).unwrap().unwrap().contains("second"));
         drop(recovered);
         drop(second);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn quota_refuses_new_snapshot_without_deleting_any_session() {
+        let base = std::env::temp_dir().join(format!("mr-quota-{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        let root = base.join("recovery-v2");
+        let first = acquire(&root).unwrap();
+        let second = acquire(&root).unwrap();
+        let data = r#"{"version":1,"markdown":"important"}"#;
+        write_budgeted(&base, &first.dir, data, 4096).unwrap();
+        write_budgeted(&base, &second.dir, data, 4096).unwrap();
+        let before = disk_usage(&root).unwrap();
+        assert!(write_budgeted(&base, &first.dir, data, before).is_err());
+        assert_eq!(disk_usage(&root).unwrap(), before);
+        assert_eq!(read(&first.dir).unwrap().unwrap(), data);
+        assert_eq!(read(&second.dir).unwrap().unwrap(), data);
+        // Count interrupted writes and old-format snapshots too.
+        fs::write(first.dir.join("interrupted.tmp"), b"12345").unwrap();
+        fs::create_dir_all(base.join("recovery-v1")).unwrap();
+        fs::write(base.join("recovery-v1/old.json"), data).unwrap();
+        assert!(write_budgeted(&base, &first.dir, data, before + data.len() as u64).is_err());
+        drop(first); drop(second);
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    // Invoked as a separate test executable by the parent. stdin is the
+    // handshake channel; no polling or arbitrary sleep is needed.
+    #[test]
+    fn subprocess_lock_holder() {
+        let Some(root) = std::env::var_os("MARKRUST_LOCK_TEST_ROOT") else { return; };
+        let session = acquire(Path::new(&root)).unwrap();
+        write(&session.dir, r#"{"version":1,"markdown":"child draft"}"#).unwrap();
+        println!("RECOVERY_READY");
+        std::io::stdout().flush().unwrap();
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input).unwrap();
+        drop(session);
+    }
+
+    #[test]
+    fn killed_process_releases_lock_and_its_draft_survives() {
+        use std::io::{BufRead, BufReader};
+        use std::process::{Command, Stdio};
+        let root = std::env::temp_dir().join(format!("mr-child-{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "recovery::tests::subprocess_lock_holder", "--nocapture"])
+            .env("MARKRUST_LOCK_TEST_ROOT", &root)
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
+        let mut output = BufReader::new(child.stdout.take().unwrap());
+        loop {
+            let mut line = String::new();
+            assert!(output.read_line(&mut line).unwrap() > 0, "child exited before acquiring lock");
+            if line.contains("RECOVERY_READY") { break; }
+        }
+        let parent = acquire(&root).unwrap();
+        assert!(read(&parent.dir).unwrap().is_none(), "live child must be skipped");
+        child.kill().unwrap();
+        child.wait().unwrap();
+        let recovered = acquire(&root).unwrap();
+        assert_ne!(recovered.dir, parent.dir);
+        assert!(read(&recovered.dir).unwrap().unwrap().contains("child draft"));
+        drop(recovered); drop(parent);
         fs::remove_dir_all(root).unwrap();
     }
 

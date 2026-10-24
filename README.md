@@ -331,3 +331,23 @@ Batas M1a: retensi masih 5 snapshot per sesi; belum ada batas disk global atau
 UI pemilih sesi terbengkalai. Dokumen yang sengaja diganti setelah konfirmasi
 masih membuang recovery sesi aktif. Pengujian dua proses desktop nyata tetap
 menjadi gerbang M1/M2; unit test lock bukan pengganti uji runtime tersebut.
+
+### M1b — Anggaran disk recovery
+
+Recovery memiliki batas total **256 MiB** (v1 + semua sesi v2, termasuk berkas
+sementara tertinggal). Pengecekan dan penulisan diserialkan dengan lock OS
+`recovery-budget.lock` antar-proses. Ruang untuk snapshot baru harus tersedia
+sebelum versi lama sesi sendiri dipangkas. Karena itu, batas bisa menolak
+snapshot walau pemangkasan setelah penulisan nantinya akan menghemat ruang.
+
+Saat batas tercapai, cadangan baru ditolak dan indikator kegagalan ditampilkan;
+penyebab native tersedia di tooltip. **Tidak ada penghapusan otomatis recovery
+sesi lain**, termasuk sesi crash. Simpan berkas asli untuk mengamankan pekerjaan;
+riwayat sesi itu kemudian dibersihkan oleh alur simpan yang sudah ada. Ini batas
+penerimaan snapshot, bukan pembersih disk paksa: data lama di atas batas tidak
+dihapus otomatis. Penulis versi lama yang tidak memakai lock anggaran tidak
+mengikuti batas ini.
+
+Tes Rust kini menjalankan proses anak nyata: sesi aktif dilewati, proses anak
+dihentikan paksa, lalu lock dan cadangannya dapat diambil kembali. Ini menguji
+filesystem/process, bukan dialog atau lifecycle webview desktop.

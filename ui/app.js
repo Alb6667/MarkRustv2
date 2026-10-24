@@ -254,9 +254,11 @@ function boot() {
     if (diskRecovery) {
       return diskRecovery.write(draft).then(() => {
         draftError.hidden = true;
+        draftError.title = '';
         return true;
-      }, () => {
+      }, (err) => {
         draftError.hidden = false;
+        draftError.title = String(err && err.message ? err.message : err);
         return false;
       });
     }

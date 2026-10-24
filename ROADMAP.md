@@ -131,3 +131,15 @@ known issues, dan catatan rilis tersedia. Beta tidak otomatis berarti stabil.
   terbengkalai setelah lock terlepas, dan perlindungan recovery v1 dengan lock.
 - Belum menutup seluruh M1: batas disk global, pemilihan beberapa recovery,
   serta bukti pengujian dua proses desktop nyata masih diperlukan.
+
+### Pelaksanaan M1b
+
+- Batas penerimaan recovery 256 MiB lintas sesi, dilindungi lock OS antar-proses;
+  snapshot baru ditolak pada batas tanpa menghapus recovery milik sesi lain.
+- Temporary files dan recovery v1 ikut dihitung; kegagalan pruning tidak lagi
+  diabaikan. Pengguna tetap perlu menyimpan berkas bila cadangan gagal.
+- Ditambahkan tes proses anak yang dihentikan paksa untuk memverifikasi pelepasan
+  lock OS dan pemulihan snapshot.
+- Masih tersisa: UI memilih beberapa recovery, pengelolaan sesi/dokumen lebih
+  lengkap, dan checklist dua aplikasi desktop nyata (M2). Jangan tandai M1/M2
+  selesai hanya berdasarkan tes subprocess.
