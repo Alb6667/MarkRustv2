@@ -272,3 +272,16 @@ Belum / perlu diperhatikan:
   dokumen lama tidak mengubah path/status dokumen penggantinya.
 - Operasi simpan paralel ditolak agar tidak berebut berkas sementara.
   Ini bukan autosave ke berkas asli; `Ctrl/Cmd+S` tetap diperlukan.
+
+### Bila cadangan tidak tersedia
+
+Cadangan memakai jeda 700 ms setelah suntingan terakhir, dengan batas tunggu
+3 detik selama mengetik berkelanjutan (timer dapat ditunda oleh sistem/browser).
+Saat halaman disembunyikan, aplikasi juga mencoba menulis draf segera.
+
+Jika localStorage penuh/diblokir, status bar menampilkan **Cadangan gagal —
+simpan berkas sekarang**. Penutupan native melalui handler yang terdaftar
+akan ditahan bila pengguna memilih tidak menyimpan dan pencadangan gagal.
+Pengguna perlu menyimpan berkas atau memperbaiki storage lalu mencoba lagi.
+Ini bukan jaminan terhadap force-quit, crash, atau matinya perangkat; data yang
+belum tercadangkan tetap berisiko hilang. Storage webview bukan backup permanen.

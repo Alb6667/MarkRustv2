@@ -124,8 +124,8 @@ export async function confirmDiscard(tauri) {
 /** Ditanyakan saat pengguna menutup jendela dengan dokumen masih kotor. */
 export async function confirmSaveOnClose(tauri) {
   const message = 'Ada perubahan yang belum disimpan. Simpan sebelum keluar?\n\n' +
-    'Jika memilih tidak menyimpan, draf tetap disimpan otomatis dan bisa ' +
-    'dipulihkan saat aplikasi dibuka lagi.';
+    'Keluar tanpa menyimpan hanya diteruskan jika cadangan draf berhasil. ' +
+    'Cadangan bukan pengganti menyimpan berkas.';
   return askOrConfirm(tauri, message, 'MarkRust', 'warning');
 }
 

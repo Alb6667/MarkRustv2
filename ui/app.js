@@ -243,35 +243,43 @@ function boot() {
 
   const DRAFT_DEBOUNCE = 700;
   let draftTimer = null;
+  let draftDeadline = null;
+  const draftError = document.getElementById('sb-draft-error');
 
   function writeDraftNow() {
     if (!dirty) return false;
-    return saveDraft(draftStorage, {
+    const saved = saveDraft(draftStorage, {
       markdown: getCanonicalMarkdown(),
       path: currentPath,
       savedAt: Date.now()
     });
+    draftError.hidden = saved;
+    return saved;
   }
 
   /** Paksa tulis draf sekarang (dipakai sebelum dialog tutup / pagehide). */
   function flushDraft() {
     clearTimeout(draftTimer);
+    clearTimeout(draftDeadline);
+    draftDeadline = null;
     draftTimer = null;
     return writeDraftNow();
   }
 
   function scheduleDraftSave() {
     clearTimeout(draftTimer);
-    draftTimer = setTimeout(function () {
-      draftTimer = null;
-      writeDraftNow();
-    }, DRAFT_DEBOUNCE);
-    // Jangan biarkan timer debounce menahan proses Node saat pengujian.
-    try { if (draftTimer && typeof draftTimer.unref === 'function') draftTimer.unref(); }
-    catch (e) { /* browser mengembalikan angka */ }
+    draftTimer = setTimeout(flushDraft, DRAFT_DEBOUNCE);
+    // Sustained typing must not postpone recovery forever.
+    if (draftDeadline === null) draftDeadline = setTimeout(flushDraft, 3000);
+    for (const timer of [draftTimer, draftDeadline]) {
+      if (timer && typeof timer.unref === 'function') timer.unref();
+    }
   }
 
   function discardDraft() {
+    clearTimeout(draftDeadline);
+    draftDeadline = null;
+    draftError.hidden = true;
     clearTimeout(draftTimer);
     draftTimer = null;
     clearDraft(draftStorage);
@@ -291,6 +299,7 @@ function boot() {
   function markClean() {
     dirty = false;
     sbDirty.hidden = true;
+    draftError.hidden = true;
     refreshTitle();
     // SENGATA tidak menghapus draf di sini: markClean() juga dipanggil saat
     // boot, dan itu akan menghilangkan draf sebelum sempat ditawarkan.
@@ -603,7 +612,16 @@ function boot() {
           if (!dirty) return;
           flushDraft();
           const saveFirst = await confirmSaveOnClose(tauri);
-          if (!saveFirst) return; // draf tersimpan, tutup boleh dilanjutkan
+          if (!saveFirst) {
+            // Include edits made while the prompt was open. Never imply that
+            // recovery is available when quota/private mode prevented backup.
+            const backedUp = flushDraft();
+            if (!backedUp) {
+              event.preventDefault();
+              await showError(tauri, 'Cadangan draf gagal. Jendela tetap terbuka; simpan berkas sebelum keluar.');
+            }
+            return;
+          }
           const ok = await saveDocument(false);
           if (!ok && event && typeof event.preventDefault === 'function') {
             event.preventDefault(); // gagal menyimpan -> jangan tutup
@@ -639,6 +657,9 @@ function boot() {
     e.returnValue = '';
   });
   window.addEventListener('pagehide', onPageHide);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') flushDraft();
+  });
 
   /* =========================================================
    * 6. Statistik — selalu dari sumber Markdown kanonik yang sama.

@@ -426,3 +426,40 @@ test('hasil simpan lama tidak mengubah path atau dirty dokumen baru', async () =
     assert.match(api.getMarkdown(), /Dokumen baru/);
   } finally { release(); pendingWrite = null; }
 });
+
+
+test('quota gagal terlihat; tutup tanpa simpan dicegah dan bisa pulih', async () => {
+  nextAskResult = true;
+  await api.newDocument();
+  api.quill.insertText(0, 'Jangan hilang karena quota', 'user');
+  const proto = Object.getPrototypeOf(window.localStorage);
+  const original = proto.setItem;
+  try {
+    proto.setItem = function () { throw new Error('QuotaExceededError'); };
+    assert.equal(api.flushDraft(), false);
+    assert.equal(window.document.getElementById('sb-draft-error').hidden, false);
+    nextAskResult = false;
+    let prevented = false;
+    await closeHandlers.at(-1)({ preventDefault() { prevented = true; } });
+    assert.equal(prevented, true);
+    assert.equal(api.isDirty(), true);
+  } finally {
+    proto.setItem = original;
+    nextAskResult = true;
+  }
+  assert.equal(api.flushDraft(), true);
+  assert.equal(window.document.getElementById('sb-draft-error').hidden, true);
+});
+
+test('mengetik berkelanjutan tetap mencadangkan sebelum berhenti', async () => {
+  await api.newDocument();
+  for (let i = 0; i < 8; i++) {
+    api.quill.insertText(0, String(i), 'user');
+    await new Promise((r) => setTimeout(r, 450));
+  }
+  const draft = JSON.parse(window.localStorage.getItem(api.draftKey));
+  assert.ok(draft, 'batas 3 detik harus menulis sebelum debounce sepi');
+  assert.ok(draft.markdown.includes('0'));
+  api.flushDraft();
+  assert.equal(JSON.parse(window.localStorage.getItem(api.draftKey)).markdown, api.getMarkdown());
+});

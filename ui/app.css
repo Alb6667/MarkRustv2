@@ -756,3 +756,5 @@
   outline: 1px dashed var(--border-hi);
   outline-offset: 2px;
 }
+
+#sb-draft-error { color: #f2b66d; }
