@@ -285,3 +285,26 @@ akan ditahan bila pengguna memilih tidak menyimpan dan pencadangan gagal.
 Pengguna perlu menyimpan berkas atau memperbaiki storage lalu mencoba lagi.
 Ini bukan jaminan terhadap force-quit, crash, atau matinya perangkat; data yang
 belum tercadangkan tetap berisiko hilang. Storage webview bukan backup permanen.
+
+## Recovery disk native (desktop)
+
+Desktop kini menggunakan `<app_data_dir>/recovery-v1/`, bukan localStorage,
+sebagai cadangan utama. Lokasi ditentukan Tauri untuk OS pengguna; frontend
+**tidak dapat memilih path recovery**. Perintah terbatas: `write_recovery`,
+`read_recovery`, `clear_recovery`. Dokumen Tanpa Judul juga dicadangkan.
+
+- Maksimum payload JSON 12 MB; maksimum **5 versi** terakhir untuk editor
+  satu-dokumen ini. Ini bukan daftar cadangan per berkas atau recent files.
+- Snapshot ditulis ke nama sementara unik, `sync_all`, lalu rename ke nama
+  final baru. Versi lama dipangkas hanya sesudah penulisan berhasil.
+- Saat startup, versi valid terbaru ditawarkan. Jika versi terbaru rusak,
+  pembaca mencoba versi sebelumnya; belum ada UI untuk memilih versi manual.
+- Simpan berhasil / buang / ganti dokumen menghapus riwayat recovery aktif.
+  Tulisan asli tidak ditimpa otomatis. Cadangan berisi teks biasa (tidak
+  terenkripsi); pada Unix file baru memakai izin 0600.
+- Browser biasa tetap memakai localStorage. Draf localStorage dari versi lama
+  ditawarkan jika belum ada recovery disk (migrasi).
+- Cadangan bukan jaminan nol kehilangan data: timer, disk penuh, force-quit,
+  kerusakan disk, dan durability direktori saat listrik mati tetap batas nyata.
+  Jangan membuka beberapa instance MarkRust sekaligus: direktori recovery
+  masih dibagi antar-instance, belum memiliki isolasi sesi lintas proses.

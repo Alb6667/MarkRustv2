@@ -34,6 +34,7 @@ import {
   showError, setWindowTitle, basename, isMarkdownFilename, titleFor,
   DEFAULT_FILENAME
 } from './core/files.js';
+import { createDiskRecovery } from './core/recovery.js';
 import {
   readDraft, saveDraft, clearDraft, restoreMessage, DRAFT_KEY
 } from './core/drafts.js';
@@ -241,6 +242,7 @@ function boot() {
   let draftStorage = null;
   try { draftStorage = window.localStorage || null; } catch (e) { draftStorage = null; }
 
+  const diskRecovery = tauri ? createDiskRecovery(tauri) : null;
   const DRAFT_DEBOUNCE = 700;
   let draftTimer = null;
   let draftDeadline = null;
@@ -248,11 +250,17 @@ function boot() {
 
   function writeDraftNow() {
     if (!dirty) return false;
-    const saved = saveDraft(draftStorage, {
-      markdown: getCanonicalMarkdown(),
-      path: currentPath,
-      savedAt: Date.now()
-    });
+    const draft = { markdown: getCanonicalMarkdown(), path: currentPath, savedAt: Date.now() };
+    if (diskRecovery) {
+      return diskRecovery.write(draft).then(() => {
+        draftError.hidden = true;
+        return true;
+      }, () => {
+        draftError.hidden = false;
+        return false;
+      });
+    }
+    const saved = saveDraft(draftStorage, draft);
     draftError.hidden = saved;
     return saved;
   }
@@ -283,6 +291,7 @@ function boot() {
     clearTimeout(draftTimer);
     draftTimer = null;
     clearDraft(draftStorage);
+    if (diskRecovery) diskRecovery.clear().catch(() => { draftError.hidden = false; });
   }
 
   function markDirty() {
@@ -610,12 +619,12 @@ function boot() {
       if (win && typeof win.onCloseRequested === 'function') {
         win.onCloseRequested(async function (event) {
           if (!dirty) return;
-          flushDraft();
+          await flushDraft();
           const saveFirst = await confirmSaveOnClose(tauri);
           if (!saveFirst) {
             // Include edits made while the prompt was open. Never imply that
             // recovery is available when quota/private mode prevented backup.
-            const backedUp = flushDraft();
+            const backedUp = await flushDraft();
             if (!backedUp) {
               event.preventDefault();
               await showError(tauri, 'Cadangan draf gagal. Jendela tetap terbuka; simpan berkas sebelum keluar.');
@@ -635,9 +644,19 @@ function boot() {
   /* Tawarkan pemulihan draf dari sesi sebelumnya. Dipanggil setelah konten
      awal dimuat, sehingga pengguna punya pembanding sebelum memutuskan. */
   async function restoreDraftIfAny() {
-    const draft = readDraft(draftStorage);
-    if (!draft) return false;
+    const generation = documentGeneration;
+    const revision = editRevision;
+    let draft;
+    try {
+      draft = diskRecovery ? await diskRecovery.read() : null;
+      if (!draft) draft = readDraft(draftStorage); // Migration from older versions.
+    } catch (err) {
+      draftError.hidden = false;
+      return false; // Never clear unreadable native backups.
+    }
+    if (!draft || generation !== documentGeneration || revision !== editRevision) return false;
     const ok = await confirmRestore(tauri, restoreMessage(draft.savedAt));
+    if (generation !== documentGeneration || revision !== editRevision) return false;
     if (!ok) { discardDraft(); return false; }
     currentPath = draft.path || null;
     applyDocument(draft.markdown);

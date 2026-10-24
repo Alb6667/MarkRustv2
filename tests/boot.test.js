@@ -31,11 +31,22 @@ const destroyed = [];
 let nextAskResult = true;
 let failWrite = false;
 let pendingWrite = null;
+let recoveryContents = null;
+let failRecovery = false;
 const DISK_DOC = '# Dokumen Dari Disk\n\nIsi dari berkas.\n';
 window.__TAURI__ = {
   core: {
     invoke: async (cmd, args) => {
       tauriCalls.push([cmd, args]);
+      if (cmd === 'write_recovery') {
+        if (failRecovery) throw new Error('disk full');
+        recoveryContents = args.contents;
+        // Mirror for legacy assertions, not used by production disk writes.
+        window.localStorage.setItem('markrust.draft.v1', args.contents);
+        return;
+      }
+      if (cmd === 'read_recovery') return recoveryContents;
+      if (cmd === 'clear_recovery') { recoveryContents = null; return; }
       if (cmd === 'write_document' && pendingWrite) await pendingWrite;
       if (cmd === 'write_document' && failWrite) throw new Error('disk penuh');
       return cmd === 'read_document' ? DISK_DOC : null;
@@ -291,6 +302,7 @@ test('gagal menyimpan saat mau keluar -> close dicegah, data tidak hilang', asyn
 test('draf dari sesi sebelumnya ditawarkan dan dipulihkan', async () => {
   await api.newDocument();
   const savedAt = Date.now() - 60000;
+  await new Promise((r) => setTimeout(r, 0));
   window.localStorage.setItem(api.draftKey, JSON.stringify({
     version: 1, markdown: '# Pulihkan saya\n\nIsi draf.\n',
     path: '/home/u/draf.md', savedAt
@@ -310,6 +322,7 @@ test('draf dari sesi sebelumnya ditawarkan dan dipulihkan', async () => {
 
 test('menolak pemulihan draf akan membuang draf tersebut', async () => {
   await api.newDocument();
+  await new Promise((r) => setTimeout(r, 0));
   window.localStorage.setItem(api.draftKey, JSON.stringify({
     version: 1, markdown: '# Draf lama\n', path: null, savedAt: Date.now()
   }));
@@ -325,7 +338,7 @@ test('menolak pemulihan draf akan membuang draf tersebut', async () => {
 test('simpan berhasil menghapus draf yang tersisa', async () => {
   await api.newDocument();
   api.quill.insertText(0, 'Akan disimpan', 'user');
-  api.flushDraft();
+  await api.flushDraft();
   assert.ok(window.localStorage.getItem(api.draftKey), 'draf harus ada sebelum simpan');
 
   assert.equal(await api.saveDocument(false), true);
@@ -435,8 +448,8 @@ test('quota gagal terlihat; tutup tanpa simpan dicegah dan bisa pulih', async ()
   const proto = Object.getPrototypeOf(window.localStorage);
   const original = proto.setItem;
   try {
-    proto.setItem = function () { throw new Error('QuotaExceededError'); };
-    assert.equal(api.flushDraft(), false);
+    failRecovery = true;
+    assert.equal(await api.flushDraft(), false);
     assert.equal(window.document.getElementById('sb-draft-error').hidden, false);
     nextAskResult = false;
     let prevented = false;
@@ -445,9 +458,10 @@ test('quota gagal terlihat; tutup tanpa simpan dicegah dan bisa pulih', async ()
     assert.equal(api.isDirty(), true);
   } finally {
     proto.setItem = original;
+    failRecovery = false;
     nextAskResult = true;
   }
-  assert.equal(api.flushDraft(), true);
+  assert.equal(await api.flushDraft(), true);
   assert.equal(window.document.getElementById('sb-draft-error').hidden, true);
 });
 
@@ -460,6 +474,6 @@ test('mengetik berkelanjutan tetap mencadangkan sebelum berhenti', async () => {
   const draft = JSON.parse(window.localStorage.getItem(api.draftKey));
   assert.ok(draft, 'batas 3 detik harus menulis sebelum debounce sepi');
   assert.ok(draft.markdown.includes('0'));
-  api.flushDraft();
+  await api.flushDraft();
   assert.equal(JSON.parse(window.localStorage.getItem(api.draftKey)).markdown, api.getMarkdown());
 });

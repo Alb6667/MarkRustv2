@@ -57,6 +57,9 @@ jobs:
       - name: Cargo build
         run: cargo build --manifest-path src-tauri/Cargo.toml
 
+      - name: Tes recovery Rust
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
       # Toolchain Rust tidak tersedia di semua mesin kontributor. Artifak ini
       # berisi Cargo.lock yang sudah diselesaikan Cargo (termasuk plugin baru),
       # jadi bisa langsung disalin ke repo tanpa harus build lokal.
