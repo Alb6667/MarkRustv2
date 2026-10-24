@@ -57,6 +57,17 @@ jobs:
       - name: Cargo build
         run: cargo build --manifest-path src-tauri/Cargo.toml
 
+      # Toolchain Rust tidak tersedia di semua mesin kontributor. Artifak ini
+      # berisi Cargo.lock yang sudah diselesaikan Cargo (termasuk plugin baru),
+      # jadi bisa langsung disalin ke repo tanpa harus build lokal.
+      - name: Simpan Cargo.lock hasil resolusi
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-lock
+          path: src-tauri/Cargo.lock
+          if-no-files-found: error
+
   # ---------------------------------------------------------------------------
   # Bundel installer hanya dibuat saat rilis, supaya PR tidak memakan menit
   # CI untuk mengunduh toolchain bundling yang berat.
@@ -87,7 +98,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf rpm
 
       - uses: tauri-apps/tauri-action@v0
         env:

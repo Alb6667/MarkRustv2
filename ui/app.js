@@ -24,6 +24,11 @@ import {
   registerDividerBlot,
   registerHrMatcher
 } from './core/quill-setup.js';
+import {
+  getTauriApi, openWithTauri, saveWithTauri, readBrowserFile,
+  downloadBrowserFile, confirmDiscard, showError, setWindowTitle,
+  basename, isMarkdownFilename, titleFor, DEFAULT_FILENAME
+} from './core/files.js';
 
 const Quill = window.Quill;
 const marked = window.marked;
@@ -37,6 +42,9 @@ if (!Quill || !marked) {
 }
 
 function boot() {
+  // `withGlobalTauri: true` menyuntikkan API vanilla JS ke window.__TAURI__.
+  // Null di browser biasa -> semua operasi berkas memakai fallback.
+  const tauri = getTauriApi();
 
   /* =========================================================
    * 1. Blot divider — modul bersama dengan harness tes
@@ -190,21 +198,32 @@ function boot() {
   const sbMode = document.getElementById('sb-mode');
   const sbDirty = document.getElementById('sb-dirty');
   const sbNotice = document.getElementById('sb-notice');
+  const sbFile = document.getElementById('sb-file');
   let currentMode = 'wysiwyg';
+  let currentPath = null;
   let dirty = false;
 
   function getCanonicalMarkdown() {
     return currentMode === 'markdown' ? textarea.value : quillToMarkdown();
   }
 
+  function refreshTitle() {
+    const name = currentPath ? basename(currentPath) : 'Tanpa Judul';
+    sbFile.textContent = name;
+    sbFile.title = currentPath || '';
+    setWindowTitle(tauri, titleFor(currentPath, dirty));
+  }
+
   function markDirty() {
     dirty = true;
     sbDirty.hidden = false;
+    refreshTitle();
   }
 
   function markClean() {
     dirty = false;
     sbDirty.hidden = true;
+    refreshTitle();
   }
 
   /* ---------------------------------------------------------
@@ -340,6 +359,148 @@ function boot() {
   btnMarkdown.addEventListener('click', function () { setMode('markdown'); });
 
   /* =========================================================
+   * 5b. Operasi berkas (Tauri + fallback browser)
+   * ======================================================= */
+  function toggleMode() {
+    setMode(currentMode === 'wysiwyg' ? 'markdown' : 'wysiwyg');
+  }
+
+  /** Terapkan dokumen ke mode yang sedang aktif. */
+  function applyDocument(md) {
+    if (currentMode === 'markdown') textarea.value = md;
+    else loadMarkdownIntoQuill(md);
+    updateStats();
+  }
+
+  function pickBrowserFile() {
+    return new Promise(function (resolve) {
+      if (typeof document === 'undefined') { resolve(null); return; }
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.md,.markdown,.txt';
+      input.addEventListener('change', function () {
+        const file = input.files && input.files[0];
+        if (!file) { resolve(null); return; }
+        readBrowserFile(file).then(resolve, function (err) {
+          showError(tauri, err && err.message ? err.message : String(err));
+          resolve(null);
+        });
+      });
+      input.click();
+    });
+  }
+
+  async function newDocument() {
+    if (dirty && !(await confirmDiscard(tauri))) return false;
+    currentPath = null;
+    applyDocument('');
+    markClean();
+    if (currentMode === 'wysiwyg') quill.focus();
+    return true;
+  }
+
+  async function openDocument() {
+    if (dirty && !(await confirmDiscard(tauri))) return false;
+    try {
+      const result = tauri ? await openWithTauri(tauri) : await pickBrowserFile();
+      if (!result) return false;
+      currentPath = result.path;
+      applyDocument(result.contents);
+      markClean();
+      return true;
+    } catch (err) {
+      await showError(tauri, err && err.message ? err.message : String(err));
+      return false;
+    }
+  }
+
+  async function saveDocument(saveAs) {
+    try {
+      const contents = getCanonicalMarkdown();
+      let savedPath;
+      if (tauri) {
+        savedPath = await saveWithTauri(tauri, {
+          path: currentPath, contents: contents, saveAs: !!saveAs
+        });
+      } else {
+        savedPath = downloadBrowserFile(
+          currentPath ? basename(currentPath) : DEFAULT_FILENAME, contents);
+      }
+      if (!savedPath) return false;
+      currentPath = savedPath;
+      markClean();
+      return true;
+    } catch (err) {
+      await showError(tauri, err && err.message ? err.message : String(err));
+      return false;
+    }
+  }
+
+  async function handleMenuAction(action) {
+    switch (action) {
+      case 'new': return newDocument();
+      case 'open': return openDocument();
+      case 'save': return saveDocument(false);
+      case 'save_as': return saveDocument(true);
+      case 'toggle_mode': toggleMode(); return true;
+      default: return false;
+    }
+  }
+
+  document.getElementById('btn-new').addEventListener('click', newDocument);
+  document.getElementById('btn-open').addEventListener('click', openDocument);
+  document.getElementById('btn-save').addEventListener('click', function (e) {
+    saveDocument(e.shiftKey);
+  });
+
+  // Pintasan keyboard ditangani terpusat di sini. Menu native sengaja tidak
+  // memasang accelerator supaya tidak ada dobel-trigger Ctrl+S.
+  document.addEventListener('keydown', function (e) {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const key = String(e.key || '').toLowerCase();
+    if (key === 's') { e.preventDefault(); saveDocument(e.shiftKey); }
+    else if (key === 'o') { e.preventDefault(); openDocument(); }
+    else if (key === 'n') { e.preventDefault(); newDocument(); }
+    else if (key === 'm' && e.shiftKey) { e.preventDefault(); toggleMode(); }
+  });
+
+  // Event dari menu native Rust (Berkas > ...).
+  if (tauri && tauri.event && typeof tauri.event.listen === 'function') {
+    try {
+      tauri.event.listen('markrust://menu', function (event) {
+        handleMenuAction(event && event.payload);
+      });
+    } catch (e) { /* diabaikan: frontend tetap bisa lewat tombol & shortcut */ }
+  }
+
+  // Drag & drop berkas .md (berjalan di webview maupun browser).
+  document.addEventListener('dragover', function (e) { e.preventDefault(); });
+  document.addEventListener('drop', function (e) {
+    const dt = e.dataTransfer;
+    const file = dt && dt.files && dt.files[0];
+    if (!file) return;
+    e.preventDefault();
+    if (!isMarkdownFilename(file.name)) {
+      showError(tauri, 'Berkas harus berekstensi .md, .markdown, atau .txt');
+      return;
+    }
+    readBrowserFile(file).then(async function (result) {
+      if (dirty && !(await confirmDiscard(tauri))) return;
+      currentPath = result.path;
+      applyDocument(result.contents);
+      markClean();
+    }, function (err) {
+      showError(tauri, err && err.message ? err.message : String(err));
+    });
+  });
+
+  window.addEventListener('beforeunload', function (e) {
+    if (!dirty) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+
+  /* =========================================================
    * 6. Statistik — selalu dari sumber Markdown kanonik yang sama.
    * ======================================================= */
   let statsTimer = null;
@@ -414,6 +575,7 @@ function boot() {
   ].join('\n');
 
   loadMarkdownIntoQuill(defaultMarkdown);
+  markClean();
 
   // Jembatan untuk pengujian dan untuk integrasi Tauri di kemudian hari.
   window.MarkRust = {
@@ -426,6 +588,11 @@ function boot() {
     getStats: function () { return documentStats(getCanonicalMarkdown()); },
     isDirty: function () { return dirty; },
     markClean: markClean,
+    getPath: function () { return currentPath; },
+    newDocument: newDocument,
+    openDocument: openDocument,
+    saveDocument: saveDocument,
+    handleMenuAction: handleMenuAction,
     isToolbarPinned: function () { return pinned; },
     isToolbarVisible: isToolbarShown
   };

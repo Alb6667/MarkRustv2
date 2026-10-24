@@ -43,13 +43,14 @@ ui/
     serialize.js    Delta Quill -> Markdown (murni, tanpa DOM/Quill instance)
     markdown.js     Markdown -> HTML untuk Quill + statistik dokumen
     quill-setup.js  registrasi blot <hr> & matcher clipboard (dipakai app + tes)
+  files.js        I/O dokumen: dialog Tauri + fallback browser
   vendor/           library pihak ketiga (lokal, offline-ready)
 tests/
   harness.js        jsdom + Quill/marked hasil vendoring (bukan mock)
   *.test.js         unit + round-trip sungguhan + smoke test boot aplikasi
 .github/workflows/  CI: tes Node + build Rust di Linux/Windows/macOS
 src-tauri/
-  src/main.rs       shell Tauri (jendela + webview)
+  src/main.rs       shell Tauri + perintah berkas + menu native
   tauri.conf.json   konfigurasi aplikasi
   capabilities/     izin IPC (ACL) untuk jendela utama
   icons/            ikon desktop saja (mobile belum didukung)
@@ -95,6 +96,9 @@ kehilangan tag pembungkusnya.
   native; CSS lama tidak bekerja di Linux/WebKitGTK.
 - **Dialog gambar memakai `<dialog>` native**, bukan `window.prompt` yang tidak
   reliabel di WKWebView/Tauri. Hanya `http://` dan `https://` yang diterima.
+- **Konfigurasi toolbar Quill dikirim sebagai array**, lalu handler gambar
+  dipasang via `addHandler()`. Bentuk `{ container, handlers }` bergantung pada
+  pemeriksaan internal `constructor !== Object` yang rapuh lintas realm.
 
 ### Catatan privasi gambar
 
@@ -137,7 +141,58 @@ blockquote tidak bisa dipertahankan.
 
 Lihat `ui/vendor/README.md` untuk detail dan cara memperbarui.
 
-## Status
+## Berkas & pintasan
 
-Fondasi editor sudah berfungsi. Yang belum ada: buka/simpan berkas (butuh
-`tauri-plugin-fs` + `tauri-plugin-dialog`) dan pintasan keyboard.
+Tombol **Baru / Buka / Simpan** ada di kiri toolbar; menu native **Berkas**
+tersedia pula di aplikasi desktop.
+
+| Pintasan | Aksi |
+| --- | --- |
+| `Ctrl/Cmd+N` | Dokumen baru |
+| `Ctrl/Cmd+O` | Buka berkas |
+| `Ctrl/Cmd+S` | Simpan |
+| `Ctrl/Cmd+Shift+S` | Simpan Sebagai |
+| `Ctrl/Cmd+Shift+M` | Ganti mode WYSIWYG / Markdown |
+
+Berkas `.md` juga bisa dijatuhkan langsung ke jendela. Di browser biasa
+(tanpa Tauri) fitur ini otomatis memakai fallback: `<input type="file">`
+untuk membuka dan unduhan Blob untuk menyimpan.
+
+### Arsitektur I/O
+
+Frontend **tidak** diberi akses filesystem umum. Hanya dua perintah Rust yang
+menyentuh disk:
+
+- `read_document(path)` — menolak path relatif dan berkas di atas 10 MB.
+- `write_document(path, contents)` — menulis ke berkas sementara di direktori
+  yang sama lalu `rename`, sehingga pembaca tidak pernah melihat dokumen
+  setengah jadi.
+
+Dialog pemilih berkas memakai `tauri-plugin-dialog`. API vanilla JS tersedia
+lewat `withGlobalTauri: true`, jadi tetap **tanpa bundler dan tanpa Node**
+di runtime. Menu native sengaja tidak memasang accelerator: pintasan keyboard
+dipusatkan di frontend agar tidak ada dobel-trigger `Ctrl+S`.
+
+> `Cargo.lock` di repo belum mencantumkan `tauri-plugin-dialog` karena sandbox
+> ini tidak punya toolchain Rust. CI menyimpan lockfile hasil resolusi sebagai
+> artifak **`cargo-lock`** pada job build Linux — salin ke `src-tauri/` setelah
+> build pertama (atau cukup jalankan `cargo build` sekali secara lokal).
+
+## Status & batasan yang diketahui
+
+Sudah berfungsi: editing WYSIWYG, toggle Markdown, round-trip format, buka/
+simpan berkas, menu native, pintasan, drag-drop, dan statistik dokumen.
+
+Belum / perlu diperhatikan:
+
+- **Konfirmasi tutup jendela** belum mencegat tombol close native di Tauri
+  (baru `beforeunload` di webview), jadi perubahan belum tersimpan bisa hilang
+  jika aplikasi ditutup paksa.
+- **Belum ada autosave/backup** dan daftar berkas terakhir.
+- **Gambar jarak jauh** masih dimuat dari jaringan (lihat *Catatan privasi
+  gambar* di atas); pemblokiran penuh butuh blot gambar kustom.
+- **Raw HTML**, soft/hard line break, dan `:---` mengikuti batasan yang sudah
+  dijelaskan di bagian konversi.
+- **Lisensi proyek** belum ditentukan. Yang ada saat ini hanya lisensi
+  milik library yang di-vendoring; pilih lisensi untuk kode MarkRust sendiri
+  sebelum dirilis ke publik.
