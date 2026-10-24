@@ -49,9 +49,16 @@ adalah `<div>`, bullet list direpresentasikan sebagai `<ol data-list="bullet">`,
 disimpan sebagai atribut format. Mengonversi DOM-nya akan merusak ketiganya, sehingga
 serializer ini membaca **Delta** Quill langsung, yang merupakan model datanya yang sebenarnya.
 
-Hal-hal yang dijaga saat round-trip: bahasa pada fenced code block, jenis list
-(bullet/ordered/bersarang), task list, tabel GFM, tautan, gambar, warna teks dan latar,
-serta garis pemisah (`---`).
+Hal-hal yang dijaga saat round-trip: bahasa **dan indentasi** pada fenced code block
+(spasi/tab di awal baris tidak lagi terlipat), jenis list (bullet/ordered/bersarang,
+termasuk list campuran dengan penomoran yang tetap berlanjut), task list, tabel GFM
+beserta alignment kolom `:---:`/`---:`, backtick di dalam inline code (fence memanjang
+otomatis), tautan, gambar, warna teks dan latar, serta garis pemisah (`---`).
+
+Catatan batasan: Quill 2 tidak menyimpan alignment rata kiri eksplisit, jadi `:---`
+ditulis ulang menjadi `---` (keduanya identik secara GFM). Quill juga melepas atribut
+blockquote pada baris yang sekaligus merupakan item list, sehingga list di dalam
+blockquote tidak bisa dipertahankan.
 
 ## Library yang di-vendoring
 

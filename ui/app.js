@@ -131,10 +131,11 @@
 
   /*
    * Quill 2 menolak/mengabaikan beberapa elemen standar. Normalisasi:
-   *   <th>      -> <td>              (Quill tidak mengenali <th>)
+   *   <th>      -> <td>              (Quill tidak mengenali <th>; align dipertahankan)
    *   baris |---|---| dibuang        (jika tidak, jadi baris data palsu)
    *   <del>     -> <s>               (blot strike Quill memakai <s>)
-   *   <pre><code> -> code block native Quill (menjaga info bahasa)
+   *   <pre><code> -> <pre data-language> (code block native; tag <pre> menjaga
+   *                              whitespace mentah agar indentasi tidak hilang)
    *   checkbox  -> teks "[ ] " / "[x] " (agar task list tidak hilang)
    */
   function normalizeForQuill(html) {
@@ -143,11 +144,14 @@
 
     var i, nodes;
 
-    // <th> -> <td>
+    // <th> -> <td> (sambil mempertahankan alignment kolom; marked menaruh
+    // atribut align="left|center|right" pada th maupun td)
     nodes = root.querySelectorAll('th');
     for (i = 0; i < nodes.length; i++) {
       var th = nodes[i];
       var td = doc.createElement('td');
+      var thAlign = th.getAttribute('align');
+      if (thAlign) td.setAttribute('align', thAlign);
       while (th.firstChild) td.appendChild(th.firstChild);
       th.parentNode.replaceChild(td, th);
     }
@@ -188,7 +192,13 @@
       del.parentNode.replaceChild(s, del);
     }
 
-    // <pre><code class="language-x"> -> blok kode native Quill
+    // <pre><code class="language-x"> -> <pre data-language="x"> native Quill.
+    // PENTING: elemennya HARUS tetap ber-tag <pre>, bukan div .ql-code-block.
+    // Matcher clipboard Quill hanya mempertahankan whitespace mentah (spasi
+    // dan tab di awal baris) di dalam keturunan <pre>; di luar <pre> spasi
+    // dilipat (/ {2,}/ -> satu spasi) lalu spasi awal dibuang, sehingga
+    // indentasi kode akan hilang. Atribut data-language dibaca oleh
+    // CodeBlock.formats() sebagai bahasa fence saat serialisasi balik.
     nodes = root.querySelectorAll('pre');
     for (i = 0; i < nodes.length; i++) {
       var pre = nodes[i];
@@ -199,21 +209,13 @@
         var m = (code.getAttribute('class') || '').match(/(?:^|\s)(?:language|lang)-([^\s]+)/);
         if (m) lang = m[1];
       }
-      var container = doc.createElement('div');
-      container.className = 'ql-code-block-container';
-      container.setAttribute('spellcheck', 'false');
-      if (lang) container.setAttribute('data-language', lang);
-
-      var text = (source.textContent || '').replace(/\n$/, '');
-      var lines = text.split('\n');
-      for (var ln = 0; ln < lines.length; ln++) {
-        var lineDiv = doc.createElement('div');
-        lineDiv.className = 'ql-code-block';
-        if (lang) lineDiv.setAttribute('data-language', lang);
-        lineDiv.textContent = lines[ln];
-        container.appendChild(lineDiv);
-      }
-      pre.parentNode.replaceChild(container, pre);
+      var nativePre = doc.createElement('pre');
+      if (lang) nativePre.setAttribute('data-language', lang);
+      // textContent -> escaping entity ditangani DOM saat serialisasi.
+      // Buang satu newline trailing: Quill menjadikan tiap baris sebagai
+      // satu code-block line, newline ekstra akan menjadi baris kosong palsu.
+      nativePre.textContent = (source.textContent || '').replace(/\n$/, '');
+      pre.parentNode.replaceChild(nativePre, pre);
     }
 
     // Checkbox task list -> teks literal
@@ -296,7 +298,19 @@
       }
       var a = r.attrs || {};
       var t = r.text == null ? '' : String(r.text);
-      if (a.code) { out += '`' + t.replace(/`/g, '') + '`'; continue; }
+      if (a.code) {
+        // Fence harus lebih panjang dari run backtick terpanjang di dalam isi,
+        // kalau tidak backtick-nya akan menutup code span lebih awal.
+        var btRuns = t.match(/`+/g) || [];
+        var maxBt = 0;
+        for (var bi = 0; bi < btRuns.length; bi++) maxBt = Math.max(maxBt, btRuns[bi].length);
+        var btFence = new Array(maxBt + 2).join('`');
+        // CommonMark: konten yang diawali/diakhiri backtick butuh spasi bantalan
+        // agar fence pembuka dan penutup tetap dikenali parser.
+        var btPad = (t.charAt(0) === '`' || t.charAt(t.length - 1) === '`') ? ' ' : '';
+        out += btFence + btPad + t + btPad + btFence;
+        continue;
+      }
       t = escapeText(t, inTable);
       if (a.bold) t = '**' + t + '**';
       if (a.italic) t = '*' + t + '*';
@@ -336,19 +350,30 @@
     return new Array(Math.max(3, max + 1) + 1).join('`');
   }
 
+  // Sel dibawa sebagai { text, align }. Quill hanya menyimpan alignment
+  // non-default: 'center' dan 'right'. Eksplisit 'left' (':---') tidak bisa
+  // direpresentasikan dan ditulis sebagai '---' — secara GFM keduanya sama,
+  // yaitu rata kiri (perilaku default).
+  function alignToken(align) {
+    if (align === 'center') return ':---:';
+    if (align === 'right') return '---:';
+    return '---';
+  }
+
   function renderTable(rows) {
     if (!rows.length) return '';
     var width = 0, i;
     for (i = 0; i < rows.length; i++) width = Math.max(width, rows[i].length);
     var norm = rows.map(function (r) {
       var c = r.slice(0, width);
-      while (c.length < width) c.push('');
+      while (c.length < width) c.push({ text: '', align: undefined });
       return c;
     });
     var rowLine = function (cells) {
-      return '| ' + cells.map(function (c) { return c === '' ? ' ' : c; }).join(' | ') + ' |';
+      return '| ' + cells.map(function (c) { return c.text === '' ? ' ' : c.text; }).join(' | ') + ' |';
     };
-    var out = [rowLine(norm[0]), rowLine(norm[0].map(function () { return '---'; }))];
+    var delimLine = '| ' + norm[0].map(function (c) { return alignToken(c.align); }).join(' | ') + ' |';
+    var out = [rowLine(norm[0]), delimLine];
     for (i = 1; i < norm.length; i++) out.push(rowLine(norm[i]));
     return out.join('\n');
   }
@@ -372,6 +397,12 @@
 
     var blocks = [];
     var i = 0;
+    // State list dipakai bersama lintas blok: list campuran (ordered yang
+    // disisipi bullet bersarang) dipecah menjadi beberapa blok karena type-nya
+    // berbeda, tetapi penomoran dan lebar marker harus tetap berlanjut.
+    var listCounters = [];
+    var listMarkerWidths = [];
+    var prevWasList = false;
     var isEmpty = function (l) { return !l.divider && (!l.runs || l.runs.length === 0); };
     var kindOf = function (l) {
       var a = l.attrs || {};
@@ -386,10 +417,17 @@
     while (i < lines.length) {
       var l = lines[i];
 
-      if (l.divider) { blocks.push('---'); i++; continue; }
+      if (l.divider) { blocks.push('---'); prevWasList = false; i++; continue; }
       if (isEmpty(l)) { i++; continue; }
 
       var kind = kindOf(l);
+      if (kind !== 'list') {
+        // Konten non-list memutus rangkaian list: penomoran dimulai ulang
+        // dan jejak lebar marker leluhur dibersihkan.
+        listCounters = [];
+        listMarkerWidths = [];
+        prevWasList = false;
+      }
 
       if (kind === 'code') {
         var lang = codeLangOf(l);
@@ -424,7 +462,12 @@
       if (kind === 'list') {
         var type = l.attrs.list;
         var items = [];
-        var counters = [];
+        // listMarkerWidths: lebar marker (jumlah karakter sebelum teks) per
+        // kedalaman. Padding anak harus sejajar teks induk, bukan kelipatan
+        // 2 spasi: '- ' = 2, '1. ' = 3, '- [ ] ' = 6. Salah lebar membuat list
+        // campuran lepas dari induknya saat dibaca ulang. State ini bertahan
+        // lintas blok (lihat deklarasi di atas loop) dan direset saat konten
+        // non-list memutus rangkaian.
         while (i < lines.length && kindOf(lines[i]) === 'list' && lines[i].attrs.list === type) {
           var indent = Math.max(0, Math.min(7, parseInt(lines[i].attrs.indent, 10) || 0));
           var runs = lines[i].runs;
@@ -453,9 +496,9 @@
           if (task) {
             marker = '- [' + task + '] ';
           } else if (type === 'ordered') {
-            counters.length = indent + 1;
-            counters[indent] = (counters[indent] || 0) + 1;
-            marker = counters[indent] + '. ';
+            listCounters.length = indent + 1;
+            listCounters[indent] = (listCounters[indent] || 0) + 1;
+            marker = listCounters[indent] + '. ';
           } else if (type === 'checked') {
             marker = '- [x] ';
           } else if (type === 'unchecked') {
@@ -463,12 +506,22 @@
           } else {
             marker = '- ';
           }
-          var pad = new Array(indent + 1).join('  ');
+          listMarkerWidths[indent] = marker.length;
+          var pad = '';
+          for (var depth = 0; depth < indent; depth++) {
+            pad += new Array((listMarkerWidths[depth] || 2) + 1).join(' ');
+          }
           var cont = new Array(marker.length + 1).join(' ');
           items.push(pad + marker + text.replace(/\n/g, '\n' + pad + cont));
           i++;
         }
-        blocks.push(items.join('\n'));
+        // Blok list yang berdekatan (type berbeda, mis. ordered lalu bullet
+        // bersarang) disambung tanpa baris kosong supaya tetap satu list yang
+        // sama dan penomoran tidak terlihat terputus.
+        var listText = items.join('\n');
+        if (prevWasList) blocks[blocks.length - 1] += '\n' + listText;
+        else blocks.push(listText);
+        prevWasList = true;
         continue;
       }
 
@@ -478,7 +531,10 @@
         while (i < lines.length && kindOf(lines[i]) === 'table') {
           var id = String(lines[i].attrs.table);
           if (id !== lastId) { rows.push([]); lastId = id; }
-          rows[rows.length - 1].push(renderInline(lines[i].runs, true));
+          rows[rows.length - 1].push({
+            text: renderInline(lines[i].runs, true),
+            align: lines[i].attrs.align
+          });
           i++;
         }
         var tbl = renderTable(rows);
