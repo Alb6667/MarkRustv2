@@ -105,7 +105,7 @@
     color: var(--text-muted);
   }
 
-  /* Pemisah hairline antar wilayah toolbar (brand | kontrol | mode). */
+  /* Pemisah hairline antara pin dan simbol brand di zona kanan. */
   .tb-divider {
     flex: none;
     width: 1px;
@@ -127,11 +127,20 @@
     padding: 0 !important;
     display: flex !important;
     align-items: center;
+    justify-content: center;
     flex-wrap: wrap !important;
     gap: 2px;
   }
 
-  /* Kelompok kontrol (Heading | B I U S | warna | list | ...).
+  /* Zona kiri (switch mode) dan kanan (pin + brand) berlebar konten,
+     zona tengah flex:1 sehingga kelompok ikon berada tepat di tengah. */
+  .toolbar-left {
+    flex: none;
+    display: flex;
+    align-items: center;
+  }
+
+  /* Kelompok kontrol (H1 H2 H3 | B I U S | warna | list | ...).
      Batas kelompok: hairline netral + jarak seragam 8px antar grup,
      2px antar tombol di dalam grup. */
   .ql-toolbar.ql-snow .ql-formats {
@@ -176,6 +185,29 @@
     width: 16px;
     height: 16px;
   }
+
+  /* Tombol header independen H1/H2/H3 — label teks, bukan ikon SVG bawaan.
+     Lebar mengikuti konten, bukan kotak 28px seperti tombol ikon. */
+  .ql-toolbar.ql-snow button.ql-header {
+    width: auto !important;
+    padding: 0 8px !important;
+  }
+  .ql-toolbar.ql-snow button.ql-header svg {
+    display: none;
+  }
+  .ql-toolbar.ql-snow button.ql-header::before {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    line-height: 1;
+    color: var(--text-dim);
+    transition: color 0.14s ease;
+  }
+  .ql-toolbar.ql-snow button.ql-header[value="1"]::before { content: 'H1'; }
+  .ql-toolbar.ql-snow button.ql-header[value="2"]::before { content: 'H2'; }
+  .ql-toolbar.ql-snow button.ql-header[value="3"]::before { content: 'H3'; }
+  .ql-toolbar.ql-snow button.ql-header:hover::before { color: var(--text); }
+  .ql-toolbar.ql-snow button.ql-header.ql-active::before { color: var(--text); }
   .ql-toolbar.ql-snow button:hover {
     background: rgba(255, 255, 255, 0.05) !important;
   }
@@ -213,9 +245,8 @@
     fill: var(--text) !important;
   }
 
-  /* Picker (Heading, warna teks, warna latar) — bahasa ghost yang sama
-     dengan tombol: tanpa border saat diam, permukaan muncul saat hover,
-     tinggi 28px selaras tombol, radius 7px. */
+  /* Picker warna (teks dan latar) — bahasa ghost yang sama dengan tombol:
+     tanpa border saat diam, permukaan muncul saat hover, tinggi 28px. */
   .ql-toolbar.ql-snow .ql-picker {
     color: var(--text-dim) !important;
     border: none !important;
@@ -239,35 +270,6 @@
   .ql-toolbar.ql-snow .ql-picker svg {
     width: 15px;
     height: 15px;
-  }
-  /* Caret pada picker teks (Heading): posisinya absolute di Quill, jadi
-     cukup kecilkan lebar dan koreksi offset vertikalnya. */
-  .ql-toolbar.ql-snow .ql-picker:not(.ql-color-picker):not(.ql-icon-picker) svg {
-    width: 13px;
-    margin-top: -6.5px;
-  }
-  /* Label "H1/H2/H3" lebih pendek dari "Heading N", jadi lebar picker
-     dikecilkan dari 98px bawaan Quill. Padding label bawaan Quill (8px)
-     dikecilkan agar "Normal" tetap muat tanpa terpotong. */
-  .ql-toolbar.ql-snow .ql-picker.ql-header {
-    width: 72px;
-  }
-  .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-label {
-    padding-left: 4px;
-  }
-
-  /* Label heading: ganti "Heading N" menjadi "HN". Teks ini datang dari
-     quill.snow.css lewat ::before berbasis data-value, bukan dari DOM. */
-  .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-label[data-value="1"]::before,
-  .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-item[data-value="1"]::before { content: 'H1'; }
-  .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-label[data-value="2"]::before,
-  .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-item[data-value="2"]::before { content: 'H2'; }
-  .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-label[data-value="3"]::before,
-  .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-item[data-value="3"]::before { content: 'H3'; }
-  /* Item dropdown tidak perlu mempratinjau ukuran heading — seragamkan agar
-     daftannya ringkas dan konsisten dengan toolbar minimalis. */
-  .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-item::before {
-    font-size: 13px !important;
   }
   .ql-toolbar.ql-snow .ql-picker:hover {
     color: var(--text) !important;
@@ -299,8 +301,8 @@
   .ql-toolbar.ql-snow .ql-picker:hover .ql-picker-label .ql-stroke {
     stroke: var(--text) !important;
   }
-  /* Label aktif (mis. "Heading 2"): cukup cerah, jangan biru. Tema snow
-     bawaan Quill memberi warnanya sendiri sehingga harus di-override. */
+  /* Label picker aktif: cukup cerah, jangan biru. Tema snow bawaan Quill
+     memberi warnanya sendiri sehingga harus di-override. */
   .ql-toolbar.ql-snow .ql-picker-label.ql-active,
   .ql-toolbar.ql-snow .ql-picker-label.ql-active .ql-stroke {
     color: var(--text) !important;
@@ -326,7 +328,7 @@
   }
 
   /* Segmented control: wadah inset gelap, segmen aktif berupa permukaan
-     terangkat. Tinggi total 28px (24px segmen + 2px padding atas-bawah). */
+     terangkat. Khusus simbol: dua tombol kotak 24px, tinggi total 28px. */
   .mode-switch {
     display: flex;
     align-items: center;
@@ -338,28 +340,34 @@
   }
 
   .mode-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
     height: 24px;
-    padding: 0 12px;
+    padding: 0;
     border: none;
     border-radius: 999px;
     background: transparent;
     color: var(--text-muted);
-    font-size: 12px;
-    font-family: var(--font-sans);
     cursor: pointer;
-    white-space: nowrap;
     transition: background-color 0.14s ease, color 0.14s ease;
+  }
+  .mode-btn svg { width: 14px; height: 14px; }
+  .mode-glyph {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1;
   }
   .mode-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
   .mode-btn:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
-  /* Aktif: permukaan terangkat + teks putih, tanpa warna aksen. */
+  /* Aktif: permukaan terangkat + ikon putih, tanpa warna aksen. */
   .mode-btn.active {
     background: var(--bg-overlay);
     color: var(--text);
-    font-weight: 600;
   }
 
   /* Tombol pin ghost — bahasa visual yang sama dengan tombol format Quill.
@@ -672,19 +680,30 @@
 <div id="app">
   <!-- TOOLBAR -->
   <div id="toolbar">
-    <!-- Brand cukup simbol: nama aplikasi disampaikan lewat aria-label. -->
-    <span class="brand" role="img" aria-label="MarkRust">◆</span>
-    <span class="tb-divider" aria-hidden="true"></span>
-    <div id="quill-toolbar"></div>
-    <span class="tb-divider" aria-hidden="true"></span>
-    <div class="toolbar-right">
-      <!-- Segmented control: dua mode dalam satu wadah pill. -->
+    <!-- Kiri: switch mode, simbol saja. -->
+    <div class="toolbar-left">
       <div class="mode-switch" role="group" aria-label="Mode editor">
-        <button class="mode-btn active" id="btn-wysiwyg" type="button">✦ WYSIWYG</button>
-        <button class="mode-btn" id="btn-markdown" type="button">⟨/⟩ Markdown</button>
+        <button class="mode-btn active" id="btn-wysiwyg" type="button"
+                title="Mode WYSIWYG" aria-label="Mode WYSIWYG">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+        <button class="mode-btn" id="btn-markdown" type="button"
+                title="Mode Markdown" aria-label="Mode Markdown">
+          <span class="mode-glyph" aria-hidden="true">⟨/⟩</span>
+        </button>
       </div>
-      <!-- Pin: menahan toolbar supaya selalu tampil dan auto-hide mati.
-           Ikonnya pin dorong bergaris, selaras dengan ikon Quill di kiri. -->
+    </div>
+
+    <!-- Tengah: seluruh kontrol format Quill. -->
+    <div id="quill-toolbar"></div>
+
+    <!-- Kanan: pin lalu simbol aplikasi. -->
+    <div class="toolbar-right">
+      <!-- Pin: menahan toolbar supaya selalu tampil dan auto-hide mati. -->
       <button class="pin-btn" id="btn-pin" type="button"
               aria-pressed="false" title="Pin toolbar (selalu tampil)"
               aria-label="Pin toolbar">
@@ -694,6 +713,9 @@
           <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>
         </svg>
       </button>
+      <span class="tb-divider" aria-hidden="true"></span>
+      <!-- Brand cukup simbol: nama aplikasi disampaikan lewat aria-label. -->
+      <span class="brand" role="img" aria-label="MarkRust">◆</span>
     </div>
   </div>
 
