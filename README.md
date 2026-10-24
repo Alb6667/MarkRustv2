@@ -308,3 +308,26 @@ sebagai cadangan utama. Lokasi ditentukan Tauri untuk OS pengguna; frontend
   kerusakan disk, dan durability direktori saat listrik mati tetap batas nyata.
   Jangan membuka beberapa instance MarkRust sekaligus: direktori recovery
   masih dibagi antar-instance, belum memiliki isolasi sesi lintas proses.
+
+## Roadmap pengembangan
+
+Lihat [ROADMAP.md](ROADMAP.md) untuk urutan prioritas, cakupan, dan kriteria
+kelulusan tiap tahap menuju rilis publik.
+
+### M1a — Isolasi recovery antar-instance
+
+Recovery baru berada di `recovery-v2/session-<id>/`. Setiap proses memegang
+lock eksklusif OS pada `session.lock` sepanjang hidupnya. Pembacaan, pruning,
+dan penghapusan hanya berlaku pada sesi yang dimiliki proses tersebut. Sesi
+aktif milik proses lain dilewati; setelah crash, OS melepas lock sehingga
+satu proses berikutnya dapat mengambil recovery itu. Jika ada beberapa sesi
+terbengkalai, hanya satu diambil; sisanya dipertahankan.
+
+Draf `recovery-v1` lama dapat diambil dengan lock yang sama bila tidak ada
+recovery v2 yang diambil. Jangan menjalankan binary lama dan baru bersamaan:
+binary lama belum mengikuti protokol lock ini.
+
+Batas M1a: retensi masih 5 snapshot per sesi; belum ada batas disk global atau
+UI pemilih sesi terbengkalai. Dokumen yang sengaja diganti setelah konfirmasi
+masih membuang recovery sesi aktif. Pengujian dua proses desktop nyata tetap
+menjadi gerbang M1/M2; unit test lock bukan pengganti uji runtime tersebut.
