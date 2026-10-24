@@ -518,7 +518,105 @@
       wordcount.classList.remove('is-visible');
     }, 1800);
   }
-  document.getElementById('app').addEventListener('pointermove', revealWordCount);
+  /* ---------------------------------------------------------
+   * Toolbar auto-hide + pin
+   *
+   * Disembunyikan dengan digeser ke atas melewati batas jendela
+   * (margin-top negatif sebesar tingginya), bukan sekadar opacity 0.
+   * Editor menyerap ruangnya, jadi tidak ada celah kosong.
+   * -------------------------------------------------------*/
+  var app = document.getElementById('app');
+  var toolbar = document.getElementById('toolbar');
+  var btnPin = document.getElementById('btn-pin');
+
+  var EDGE = 8;      // zona pemicu di tepi atas jendela (px)
+  var SLACK = 12;    // toleransi agar toolbar tak menutup saat pointer sedikit turun
+  var GRACE = 400;   // jeda sebelum turun lagi (ms)
+  var PIN_KEY = 'markrust.toolbar.pinned';
+
+  var pinned = false;
+  try { pinned = localStorage.getItem(PIN_KEY) === '1'; } catch (e) { pinned = false; }
+  var tbFocus = false;
+  var tbTimer = null;
+  // 9999 = pointer belum pernah berada dekat tepi atas.
+  var lastY = 9999;
+
+  function isToolbarShown() { return !app.classList.contains('tb-hidden'); }
+
+  function syncToolbarHeight() {
+    document.documentElement.style.setProperty('--toolbar-h', toolbar.offsetHeight + 'px');
+  }
+
+  function setToolbarShown(shown) {
+    clearTimeout(tbTimer);
+    tbTimer = null;
+    app.classList.toggle('tb-hidden', !shown);
+  }
+
+  // Penundaan dipakai supaya gerakan pointer yang cepat melintasi tepi atas
+  // tidak membuat toolbar berkedip muncul-tutup.
+  function scheduleHide() {
+    if (pinned || tbFocus) return;
+    clearTimeout(tbTimer);
+    tbTimer = setTimeout(function () {
+      tbTimer = null;
+      app.classList.add('tb-hidden');
+    }, GRACE);
+  }
+
+  function onPointerMove(e) {
+    revealWordCount();
+
+    if (typeof e.clientY === 'number') lastY = e.clientY;
+    if (pinned || tbFocus) { app.classList.remove('tb-hidden'); return; }
+
+    var h = toolbar.offsetHeight;
+    // Masuk lewat tepi atas. Bertahan selama pointer masih di atas toolbar.
+    var inZone = lastY <= EDGE || (isToolbarShown() && lastY <= h + SLACK);
+    if (inZone) setToolbarShown(true);
+    else scheduleHide();
+  }
+
+  document.addEventListener('pointermove', onPointerMove);
+
+  // Aksesibilitas: Tab ke kontrol toolbar harus menampilkannya, kalau tidak
+  // pengguna keyboard tidak akan pernah bisa memakai tombol format.
+  toolbar.addEventListener('focusin', function () {
+    tbFocus = true;
+    setToolbarShown(true);
+  });
+  toolbar.addEventListener('focusout', function () {
+    tbFocus = false;
+    scheduleHide();
+  });
+
+  if (btnPin) {
+    btnPin.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+    btnPin.addEventListener('click', function () {
+      pinned = !pinned;
+      btnPin.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+      try { localStorage.setItem(PIN_KEY, pinned ? '1' : '0'); } catch (err) { /* abaikan */ }
+      if (pinned) setToolbarShown(true);
+      else scheduleHide();
+    });
+  }
+
+  if (pinned) {
+    app.classList.remove('tb-hidden');
+  } else {
+    // Tampil sebentar saat dimuat supaya jelas toolbar-nya ada, lalu turun.
+    setTimeout(function () {
+      if (!pinned && !tbFocus && lastY > EDGE) scheduleHide();
+    }, 2500);
+  }
+
+  // Tinggi diukur ulang saat toolbar membungkus menjadi dua baris.
+  if (window.ResizeObserver) {
+    new window.ResizeObserver(syncToolbarHeight).observe(toolbar);
+  } else {
+    window.addEventListener('resize', syncToolbarHeight);
+  }
+  syncToolbarHeight();
 
   function loadMarkdownIntoQuill(md) {
     var html = mdToQuillHtml(md);
@@ -641,6 +739,9 @@
     getMarkdown: function () {
       return currentMode === 'markdown' ? textarea.value : quillToMarkdown();
     },
-    setMarkdown: loadMarkdownIntoQuill
+    setMarkdown: loadMarkdownIntoQuill,
+    // Penyangga testing untuk status toolbar auto-hide.
+    isToolbarPinned: function () { return pinned; },
+    isToolbarVisible: isToolbarShown
   };
 })();

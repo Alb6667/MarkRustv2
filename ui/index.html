@@ -60,6 +60,11 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    /* Memotong toolbar yang sedang bergeser ke atas saat disembunyikan.
+       Aman bagi #wordcount: position:fixed tidak diklip overflow leluhur
+       kecuali leluhur itu membuat containing block (transform/filter),
+       dan #app tidak punya keduanya. */
+    overflow: hidden;
   }
 
   /* ====== TOOLBAR ======
@@ -77,8 +82,21 @@
     flex-shrink: 0;
     min-height: 46px;
     -webkit-app-region: drag;
+    transition: margin-top 0.18s ease, opacity 0.18s ease;
   }
   #toolbar > * { -webkit-app-region: no-drag; }
+
+  /* Auto-hide: toolbar digeser ke atas melewati batas jendela sebesar
+     tingginya sendiri, bukan sekadar opacity 0. Kalau hanya disamarkan,
+     ia tetap menempati ruang dan menyisakan celah kosong 46px di atas
+     editor. Dengan margin-top negatif, ruangnya diserap editor.
+     Tingginya diukur dari JS karena toolbar bisa membungkus menjadi dua
+     baris di jendela sempit — angka tetap tidak akan cukup. */
+  #app.tb-hidden #toolbar {
+    margin-top: calc(-1 * var(--toolbar-h, 46px));
+    opacity: 0;
+    pointer-events: none;
+  }
 
   .brand {
     flex: none;
@@ -280,6 +298,24 @@
     color: var(--bg-deep);
     border-color: var(--accent);
     font-weight: 600;
+  }
+
+  /* Tombol pin — kotak 30x30 agar sejajar dengan tombol mode di sebelahnya.
+     Statusnya dibaca dari atribut aria-pressed, jadi cukup satu sumber
+     kebenaran: tidak ada kelas terpisah yang bisa tidak sinkron. */
+  .pin-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    margin-left: 4px;
+  }
+  .pin-btn[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--bg-deep);
+    border-color: var(--accent);
   }
 
   /* ====== EDITOR AREA ====== */
@@ -546,6 +582,10 @@
       transform: none;
       transition: opacity 0.18s ease;
     }
+    /* Toolbar tetap boleh hilang-muncul, hanya tanpa geseran animasi. */
+    #toolbar {
+      transition: none;
+    }
   }
 </style>
 </head>
@@ -560,6 +600,17 @@
     <div class="toolbar-right">
       <button class="mode-btn active" id="btn-wysiwyg" type="button">✦ WYSIWYG</button>
       <button class="mode-btn" id="btn-markdown" type="button">⟨/⟩ Markdown</button>
+      <!-- Pin: menahan toolbar supaya selalu tampil dan auto-hide mati.
+           Ikonnya pin dorong bergaris, selaras dengan ikon Quill di kiri. -->
+      <button class="mode-btn pin-btn" id="btn-pin" type="button"
+              aria-pressed="false" title="Pin toolbar (selalu tampil)"
+              aria-label="Pin toolbar">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 17v5"/>
+          <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>
+        </svg>
+      </button>
     </div>
   </div>
 
