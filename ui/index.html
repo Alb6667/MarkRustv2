@@ -73,11 +73,11 @@
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
-    padding: 8px 12px;
+    padding: 6px 12px;
     background: var(--bg-base);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
-    min-height: 48px;
+    min-height: 40px;
     -webkit-app-region: drag;
     transition: margin-top 0.18s ease, opacity 0.18s ease;
   }
@@ -85,12 +85,12 @@
 
   /* Auto-hide: toolbar digeser ke atas melewati batas jendela sebesar
      tingginya sendiri, bukan sekadar opacity 0. Kalau hanya disamarkan,
-     ia tetap menempati ruang dan menyisakan celah kosong 48px di atas
+     ia tetap menempati ruang dan menyisakan celah kosong 40px di atas
      editor. Dengan margin-top negatif, ruangnya diserap editor.
      Tingginya diukur dari JS karena toolbar bisa membungkus menjadi dua
      baris di jendela sempit — angka tetap tidak akan cukup. */
   #app.tb-hidden #toolbar {
-    margin-top: calc(-1 * var(--toolbar-h, 48px));
+    margin-top: calc(-1 * var(--toolbar-h, 40px));
     opacity: 0;
     pointer-events: none;
   }
@@ -100,7 +100,7 @@
     flex: none;
     display: inline-flex;
     align-items: center;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1;
     color: var(--text-muted);
   }
@@ -109,7 +109,7 @@
   .tb-divider {
     flex: none;
     width: 1px;
-    height: 20px;
+    height: 16px;
     background: var(--border);
   }
 
@@ -132,7 +132,7 @@
   }
 
   /* Kelompok kontrol (Heading | B I U S | warna | list | ...).
-     Batas kelompok: hairline netral + jarak seragam 10px antar grup,
+     Batas kelompok: hairline netral + jarak seragam 8px antar grup,
      2px antar tombol di dalam grup. */
   .ql-toolbar.ql-snow .ql-formats {
     flex: none;
@@ -143,32 +143,38 @@
     position: relative;
   }
   .ql-toolbar.ql-snow .ql-formats + .ql-formats {
-    margin-left: 10px;
+    margin-left: 8px;
   }
   .ql-toolbar.ql-snow .ql-formats + .ql-formats::before {
     content: '';
     position: absolute;
-    left: -5px;
+    left: -4px;
     top: 50%;
     transform: translateY(-50%);
     width: 1px;
-    height: 16px;
+    height: 14px;
     background: var(--border);
   }
 
   /* Tombol format ghost: transparan saat diam, permukaan hanya muncul saat
      hover/focus. Bold, Italic, Underline, Strike, list, quote, code, ... */
   .ql-toolbar.ql-snow button {
-    width: 32px !important;
-    height: 32px !important;
+    width: 28px !important;
+    height: 28px !important;
     border: none !important;
-    border-radius: 8px !important;
+    border-radius: 7px !important;
     background: transparent !important;
     display: inline-flex !important;
     align-items: center;
     justify-content: center;
     padding: 0 !important;
     transition: background-color 0.14s ease;
+  }
+  /* Bawaan Quill: svg { height: 100% } sehingga ikon memenuhi tombol.
+     Ukur eksplisit agar proporsional dengan tombol 28px. */
+  .ql-toolbar.ql-snow button svg {
+    width: 16px;
+    height: 16px;
   }
   .ql-toolbar.ql-snow button:hover {
     background: rgba(255, 255, 255, 0.05) !important;
@@ -209,13 +215,13 @@
 
   /* Picker (Heading, warna teks, warna latar) — bahasa ghost yang sama
      dengan tombol: tanpa border saat diam, permukaan muncul saat hover,
-     tinggi dan radius konsisten (32px, radius 8). */
+     tinggi 28px selaras tombol, radius 7px. */
   .ql-toolbar.ql-snow .ql-picker {
     color: var(--text-dim) !important;
     border: none !important;
-    border-radius: 8px !important;
+    border-radius: 7px !important;
     background: transparent !important;
-    height: 32px !important;
+    height: 28px !important;
     padding: 0 6px !important;
     font-size: 12px !important;
     display: inline-flex !important;
@@ -223,16 +229,45 @@
     transition: background-color 0.14s ease, color 0.14s ease;
   }
 
-  /* Picker warna berisi ikon, bukan teks — jadi diperlakukan seperti tombol:
-     32x32 persegi dan tanpa padding tambahan.
-     Bawaan Quill untuk .ql-color-picker adalah width:28px. Dengan padding
-     0 6px yang diperlukan picker teks (Heading), ruang isinya tinggal
-     28 - 2 border - 12 padding = 14px, lalu dipotong lagi padding 4px kiri
-     kanan milik .ql-picker-label menjadi 6px untuk ikon 18px. Hasilnya ikon
-     ember cat nyaris tak terlihat. */
+  /* Picker warna berisi ikon, bukan teks — diperlakukan seperti tombol:
+     28x28 persegi tanpa padding tambahan. */
   .ql-toolbar.ql-snow .ql-picker.ql-color-picker {
-    width: 32px;
+    width: 28px;
     padding: 0 !important;
+  }
+  /* Ikon di dalam picker (ember cat, caret) disamakan dengan ikon tombol. */
+  .ql-toolbar.ql-snow .ql-picker svg {
+    width: 15px;
+    height: 15px;
+  }
+  /* Caret pada picker teks (Heading): posisinya absolute di Quill, jadi
+     cukup kecilkan lebar dan koreksi offset vertikalnya. */
+  .ql-toolbar.ql-snow .ql-picker:not(.ql-color-picker):not(.ql-icon-picker) svg {
+    width: 13px;
+    margin-top: -6.5px;
+  }
+  /* Label "H1/H2/H3" lebih pendek dari "Heading N", jadi lebar picker
+     dikecilkan dari 98px bawaan Quill. Padding label bawaan Quill (8px)
+     dikecilkan agar "Normal" tetap muat tanpa terpotong. */
+  .ql-toolbar.ql-snow .ql-picker.ql-header {
+    width: 72px;
+  }
+  .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-label {
+    padding-left: 4px;
+  }
+
+  /* Label heading: ganti "Heading N" menjadi "HN". Teks ini datang dari
+     quill.snow.css lewat ::before berbasis data-value, bukan dari DOM. */
+  .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-label[data-value="1"]::before,
+  .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-item[data-value="1"]::before { content: 'H1'; }
+  .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-label[data-value="2"]::before,
+  .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-item[data-value="2"]::before { content: 'H2'; }
+  .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-label[data-value="3"]::before,
+  .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-item[data-value="3"]::before { content: 'H3'; }
+  /* Item dropdown tidak perlu mempratinjau ukuran heading — seragamkan agar
+     daftannya ringkas dan konsisten dengan toolbar minimalis. */
+  .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-item::before {
+    font-size: 13px !important;
   }
   .ql-toolbar.ql-snow .ql-picker:hover {
     color: var(--text) !important;
@@ -291,7 +326,7 @@
   }
 
   /* Segmented control: wadah inset gelap, segmen aktif berupa permukaan
-     terangkat. Tinggi total 32px (28px segmen + 2px padding atas-bawah). */
+     terangkat. Tinggi total 28px (24px segmen + 2px padding atas-bawah). */
   .mode-switch {
     display: flex;
     align-items: center;
@@ -303,8 +338,8 @@
   }
 
   .mode-btn {
-    height: 28px;
-    padding: 0 14px;
+    height: 24px;
+    padding: 0 12px;
     border: none;
     border-radius: 999px;
     background: transparent;
@@ -334,11 +369,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     padding: 0;
     border: none;
-    border-radius: 8px;
+    border-radius: 7px;
     background: transparent;
     color: var(--text-muted);
     cursor: pointer;
