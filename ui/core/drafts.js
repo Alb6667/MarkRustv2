@@ -21,7 +21,7 @@ function safeStorage(storage) {
   }
 }
 
-/** Baca draf. Mengembalikan null bila tidak ada / rusak / kosong. */
+/** Baca draf. String kosong valid: pengguna mungkin sengaja menghapus isi. */
 export function readDraft(storage) {
   const s = safeStorage(storage);
   if (!s) return null;
@@ -30,7 +30,6 @@ export function readDraft(storage) {
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (!data || typeof data.markdown !== 'string') return null;
-    if (data.markdown.trim() === '') return null;
     return {
       markdown: data.markdown,
       path: typeof data.path === 'string' && data.path ? data.path : null,
@@ -46,10 +45,6 @@ export function saveDraft(storage, draft) {
   const s = safeStorage(storage);
   if (!s) return false;
   const markdown = draft && typeof draft.markdown === 'string' ? draft.markdown : '';
-  if (markdown.trim() === '') {
-    clearDraft(storage);
-    return false;
-  }
   try {
     s.setItem(DRAFT_KEY, JSON.stringify({
       version: DRAFT_VERSION,

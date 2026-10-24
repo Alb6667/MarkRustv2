@@ -216,6 +216,9 @@ function boot() {
   let currentMode = 'wysiwyg';
   let currentPath = null;
   let dirty = false;
+  let documentGeneration = 0;
+  let editRevision = 0;
+  let saveInProgress = false;
 
   function getCanonicalMarkdown() {
     return currentMode === 'markdown' ? textarea.value : quillToMarkdown();
@@ -275,13 +278,14 @@ function boot() {
   }
 
   function markDirty() {
+    editRevision++;
+    scheduleDraftSave();
     // Dijaga supaya IPC setTitle tidak dikirim pada setiap ketikan setelah
     // dokumen sudah berstatus kotor.
     if (dirty) return;
     dirty = true;
     sbDirty.hidden = false;
     refreshTitle();
-    scheduleDraftSave();
   }
 
   function markClean() {
@@ -434,6 +438,7 @@ function boot() {
 
   /** Terapkan dokumen ke mode yang sedang aktif. */
   function applyDocument(md) {
+    documentGeneration++;
     // Dokumen baru = kepercayaan baru. Izin gambar tidak boleh menular dari
     // dokumen sebelumnya ke dokumen yang baru dibuka.
     resetImagePolicy();
@@ -490,6 +495,11 @@ function boot() {
   }
 
   async function saveDocument(saveAs) {
+    // Never overlap writes to the same temporary file or race save dialogs.
+    if (saveInProgress) return false;
+    saveInProgress = true;
+    const generation = documentGeneration;
+    const revision = editRevision;
     try {
       const contents = getCanonicalMarkdown();
       let savedPath;
@@ -502,13 +512,22 @@ function boot() {
           currentPath ? basename(currentPath) : DEFAULT_FILENAME, contents);
       }
       if (!savedPath) return false;
-      discardDraft();
+      // An old save must not rename/clean a different document opened meanwhile.
+      if (generation !== documentGeneration) return false;
       currentPath = savedPath;
+      if (revision !== editRevision || contents !== getCanonicalMarkdown()) {
+        refreshTitle();
+        flushDraft(); // Preserve edits made while the disk write/dialog was pending.
+        return false; // Not all current edits are saved; close must remain blocked.
+      }
+      discardDraft();
       markClean();
       return true;
     } catch (err) {
       await showError(tauri, err && err.message ? err.message : String(err));
       return false;
+    } finally {
+      saveInProgress = false;
     }
   }
 
@@ -743,6 +762,7 @@ function boot() {
     setMarkdown: function (md) {
       // Jembatan ini dipakai untuk mengganti dokumen, bukan sekadar toggle
       // mode. Reset kebijakan agar izin gambar tidak menular ke dokumen baru.
+      documentGeneration++;
       resetImagePolicy();
       return loadMarkdownIntoQuill(md);
     },

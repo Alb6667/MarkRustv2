@@ -259,3 +259,16 @@ Belum / perlu diperhatikan:
 - **Lisensi proyek** belum ditentukan. Yang ada saat ini hanya lisensi
   milik library yang di-vendoring; pilih lisensi untuk kode MarkRust sendiri
   sebelum dirilis ke publik.
+
+### Perbaikan integritas draf & simpan
+
+- Setiap suntingan pengguna menjadwalkan ulang cadangan draf, bukan hanya
+  suntingan pertama setelah dokumen bersih. Debounce tetap 700 ms; crash sebelum
+  timer berjalan masih dapat kehilangan ketikan paling akhir.
+- Draf kosong tetap valid: menghapus semua isi merupakan perubahan yang perlu
+  bisa dipulihkan.
+- Simpan memakai snapshot dokumen dan revisi. Ketikan saat dialog/penulisan
+  berlangsung tetap ditandai belum tersimpan dan dicadangkan; hasil simpan
+  dokumen lama tidak mengubah path/status dokumen penggantinya.
+- Operasi simpan paralel ditolak agar tidak berebut berkas sementara.
+  Ini bukan autosave ke berkas asli; `Ctrl/Cmd+S` tetap diperlukan.

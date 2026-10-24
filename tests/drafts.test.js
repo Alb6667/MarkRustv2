@@ -36,11 +36,11 @@ test('path opsional dinormalisasi menjadi null', () => {
   assert.equal(readDraft(s).path, null);
 });
 
-test('draf kosong dianggap tidak ada dan tidak disimpan', () => {
+test('draf kosong tetap tersimpan untuk memulihkan penghapusan isi', () => {
   const s = memoryStorage();
-  assert.equal(saveDraft(s, { markdown: '   \n', savedAt: 1 }), false);
-  assert.equal(s._map.has(DRAFT_KEY), false);
-  assert.equal(readDraft(s), null);
+  assert.equal(saveDraft(s, { markdown: '   \n', savedAt: 1 }), true);
+  assert.equal(s._map.has(DRAFT_KEY), true);
+  assert.equal(readDraft(s).markdown, '   \n');
 });
 
 test('JSON rusak di storage diabaikan, bukan melempar', () => {
@@ -50,7 +50,7 @@ test('JSON rusak di storage diabaikan, bukan melempar', () => {
 
 test('payload yang tidak valid diabaikan', () => {
   assert.equal(readDraft(memoryStorage({ [DRAFT_KEY]: JSON.stringify({ markdown: 42 }) })), null);
-  assert.equal(readDraft(memoryStorage({ [DRAFT_KEY]: JSON.stringify({ markdown: '  ' }) })), null);
+  assert.equal(readDraft(memoryStorage({ [DRAFT_KEY]: JSON.stringify({ markdown: '  ' }) })).markdown, '  ');
 });
 
 test('clearDraft menghapus kunci', () => {

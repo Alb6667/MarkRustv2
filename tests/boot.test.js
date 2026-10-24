@@ -30,11 +30,13 @@ const closeHandlers = [];
 const destroyed = [];
 let nextAskResult = true;
 let failWrite = false;
+let pendingWrite = null;
 const DISK_DOC = '# Dokumen Dari Disk\n\nIsi dari berkas.\n';
 window.__TAURI__ = {
   core: {
     invoke: async (cmd, args) => {
       tauriCalls.push([cmd, args]);
+      if (cmd === 'write_document' && pendingWrite) await pendingWrite;
       if (cmd === 'write_document' && failWrite) throw new Error('disk penuh');
       return cmd === 'read_document' ? DISK_DOC : null;
     }
@@ -374,4 +376,53 @@ test('setMarkdown mereset izin gambar untuk dokumen berikutnya', async () => {
   assert.ok(!/^https?:/i.test(img.getAttribute('src') || ''),
     'dokumen baru harus kembali diblokir');
   assert.equal(window.document.getElementById('sb-load-images').hidden, false);
+});
+
+
+test('draf diperbarui juga setelah ketikan kedua saat dokumen masih kotor', async () => {
+  nextAskResult = true;
+  await api.newDocument();
+  api.quill.insertText(0, 'Pertama', 'user');
+  await new Promise((r) => setTimeout(r, 800));
+  const first = JSON.parse(window.localStorage.getItem(api.draftKey)).markdown;
+  api.quill.insertText(0, 'Kedua ', 'user');
+  await new Promise((r) => setTimeout(r, 800));
+  const second = JSON.parse(window.localStorage.getItem(api.draftKey)).markdown;
+  assert.notEqual(first, second);
+  assert.equal(second, api.getMarkdown());
+});
+
+test('ketikan selama simpan berlangsung tetap kotor dan dicadangkan', async () => {
+  await api.newDocument();
+  api.quill.insertText(0, 'Snapshot', 'user');
+  let release;
+  pendingWrite = new Promise((r) => { release = r; });
+  try {
+    const saving = api.saveDocument(false);
+    await new Promise((r) => setTimeout(r, 0));
+    api.quill.insertText(0, 'Baru ', 'user');
+    assert.equal(await api.saveDocument(false), false, 'simpan paralel ditolak');
+    release();
+    assert.equal(await saving, false, 'snapshot lama bukan seluruh perubahan terbaru');
+    assert.equal(api.isDirty(), true);
+    assert.equal(JSON.parse(window.localStorage.getItem(api.draftKey)).markdown, api.getMarkdown());
+  } finally { release(); pendingWrite = null; }
+});
+
+test('hasil simpan lama tidak mengubah path atau dirty dokumen baru', async () => {
+  await api.newDocument();
+  api.quill.insertText(0, 'Dokumen lama', 'user');
+  let release;
+  pendingWrite = new Promise((r) => { release = r; });
+  try {
+    const saving = api.saveDocument(false);
+    await new Promise((r) => setTimeout(r, 0));
+    await api.newDocument();
+    api.quill.insertText(0, 'Dokumen baru', 'user');
+    release();
+    assert.equal(await saving, false);
+    assert.equal(api.getPath(), null);
+    assert.equal(api.isDirty(), true);
+    assert.match(api.getMarkdown(), /Dokumen baru/);
+  } finally { release(); pendingWrite = null; }
 });
