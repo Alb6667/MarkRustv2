@@ -9,8 +9,9 @@ Dokumen ini adalah titik masuk untuk melanjutkan pekerjaan; baca bersama
 Editor dan recovery native sudah diimplementasikan. M1a–M1c memiliki tes otomatis
 serta build/test CI lintas OS yang hijau pada commit `0ecfd7a`. Audit lifecycle
 lanjutan menambah pengaman operasi async, tes race drop, pencegahan penulisan
-`src` gambar sesaat, dan pemisahan recovery yang ditunda dari sesi edit baru.
-Verifikasi lokal terbaru mencakup **148 tes JS**. CI audit `40074055940` pada
+`src` gambar sesaat, pemisahan recovery yang ditunda, dan downloader gambar
+native dengan CSP tanpa `https:`. Verifikasi lokal terbaru mencakup **151 tes
+JS**. CI audit `40074055940` pada
 commit `b931d22` juga lulus: Node serta build/test Rust Linux, Windows, macOS.
 
 **Belum siap dinyatakan rilis publik. M1 belum ditutup secara keseluruhan, M2
@@ -31,7 +32,7 @@ uji GUI, installer, atau jaminan tidak kehilangan data.
 | M1a | Direktori sesi dan lock OS eksklusif; sesi aktif dilewati; crash melepas lock |
 | M1b | Batas penerimaan total 256 MiB, termasuk v1/temp; lock quota lintas proses; tidak menghapus sesi lain |
 | M1c | Pemilih recovery startup bila lebih dari satu; path/waktu, batal tanpa hapus, lock diperiksa ulang |
-| Gambar | Placeholder + URL asli tetap di model, izin per dokumen, sanitasi HTML, tombol pemuatan eksplisit |
+| Gambar | Downloader Rust terbatas, DNS/IP + redirect + decode raster divalidasi, data URI, CSP tanpa `https:` |
 | Audit tambahan | Baru/Buka/drop memeriksa revisi setelah await; restore menolak dokumen kotor |
 
 ## Hasil audit lifecycle terakhir
@@ -50,7 +51,7 @@ native F07 tetap perlu dijalankan; tes jsdom bukan pengganti uji webview.
 
 ## Verifikasi yang tersedia
 
-- Lokal: `npm test` → **148 tests, 148 pass, 0 fail**.
+- Lokal: `npm test` → **151 tests, 151 pass, 0 fail**.
 - Tidak ada toolchain Rust lokal; Rust diverifikasi lewat GitHub Actions.
 - CI M1c `40073225635`, commit `0ecfd7a`: Node + build/test Rust Linux,
   Windows, macOS lulus. Bundel rilis tidak berjalan pada push biasa.
@@ -80,19 +81,24 @@ runtime native dalam sesi sandbox ini. Jangan menandai M1/M2 selesai dulu.
 - Jangan menjalankan binary sebelum protokol lock bersama versi baru.
 - File sync + rename belum menjamin durability direktori saat listrik mati.
 
-### 3. Privasi/CSP (M3, prioritas tinggi)
+### 3. Privasi/CSP (M3, implementasi kode selesai; gerbang native terbuka)
 
-`img-src` masih mengizinkan `https:`; pertahanan sekarang di aplikasi, bukan
-CSP penuh. Jangan mengklaim nol request hanya dari tes DOM jsdom. Audit dengan
-network inspector pada Markdown dan clipboard asli tetap diperlukan. Risiko
-urutan pembuatan blot sudah ditutup: URL tertahan tidak lagi diberikan ke
-`super.create()` dan tes memantau seluruh penulisan `src`, bukan hanya DOM akhir.
-Tetap periksa parsing HTML sementara di webview nyata; jika fetch teramati,
-perlakukan sebagai blocker.
+`fetch_image` kini menjadi satu-satunya jalur unduh gambar remote desktop.
+URL asli disimpan di `data-mr-src`; `src` hanya menerima data URI raster yang
+sudah divalidasi. `https:` sudah dihapus dari `img-src`, dan browser fallback
+tetap terpisah.
 
-Desain lanjutan: downloader native terbatas dengan validasi skema/DNS/IP,
-redirect, ukuran/timeouts, format gambar aman; tidak membuka HTTP client umum
-ke webview. Baru setelah itu hapus https dari CSP.
+Native membatasi URL 4 KiB, 3 redirect, timeout 5/12 detik, body 8 MiB,
+PNG/JPEG/GIF/WebP, dimensi 8192×8192 dan alokasi decode 128 MiB. Proxy/cookie
+store tidak digunakan; setiap DNS resolution dan redirect divalidasi lalu IP
+di-pin. Satu batch klik memproses maksimum 12 gambar. Empat unit test Rust
+menguji alamat non-publik dan decoder terbatas.
+
+**Jangan tutup M3 dari bukti ini saja.** P01–P04 masih `BELUM DIUJI`: perlu
+network inspector pada webview nyata, clipboard, protocol-relative URL,
+redirect/DNS server terkontrol, payload salah/oversize, serta round-trip URL.
+Build CI juga masih harus memverifikasi kompilasi dependensi baru. Jika ada
+request sebelum izin atau ke jaringan privat, perlakukan sebagai blocker.
 
 ### 4. Build/distribusi (M4)
 

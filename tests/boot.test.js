@@ -37,6 +37,8 @@ let recoveryContents = null;
 let recoveryRows = [];
 let failRecovery = false;
 const DISK_DOC = '# Dokumen Dari Disk\n\nIsi dari berkas.\n';
+const NATIVE_IMAGE = 'data:image/png;base64,iVBORw0KGgo=';
+let nativeImageResponse = NATIVE_IMAGE;
 window.__TAURI__ = {
   core: {
     invoke: async (cmd, args) => {
@@ -52,6 +54,7 @@ window.__TAURI__ = {
       if (cmd === 'clear_recovery') { recoveryContents = null; return; }
       if (cmd === 'list_recoveries') return JSON.stringify(recoveryRows);
       if (cmd === 'fresh_recovery') return null;
+      if (cmd === 'fetch_image') return nativeImageResponse;
       if (cmd === 'read_document' && pendingRead) await pendingRead;
       if (cmd === 'write_document' && pendingWrite) await pendingWrite;
       if (cmd === 'write_document' && failWrite) throw new Error('disk penuh');
@@ -358,7 +361,10 @@ test('simpan berhasil menghapus draf yang tersisa', async () => {
  * ------------------------------------------------------------------------- */
 
 test('membuka dokumen asing menahan gambar dan menampilkan tombol Muat gambar', async () => {
+  const fetchesBefore = tauriCalls.filter(([cmd]) => cmd === 'fetch_image').length;
   api.setMarkdown('![foto](https://tracker.example/pixel.png)\n');
+  assert.equal(tauriCalls.filter(([cmd]) => cmd === 'fetch_image').length, fetchesBefore,
+    'membuka dokumen tidak boleh meminta unduhan sebelum izin');
   const imgs = Array.from(api.quill.root.querySelectorAll('img'));
   assert.equal(imgs.length, 1);
   assert.ok(!/^https?:/i.test(imgs[0].getAttribute('src') || ''),
@@ -371,11 +377,15 @@ test('membuka dokumen asing menahan gambar dan menampilkan tombol Muat gambar', 
   assert.match(window.document.getElementById('sb-notice').textContent, /diblokir/);
 });
 
-test('Muat gambar mengembalikan src asli dan menyembunyikan tombol', async () => {
+test('Muat gambar memakai data raster native dan menyembunyikan tombol', async () => {
   const n = await api.loadRemoteImages();
   assert.equal(n, 1);
   const img = api.quill.root.querySelector('img');
-  assert.equal(img.getAttribute('src'), 'https://tracker.example/pixel.png');
+  assert.equal(img.getAttribute('src'), NATIVE_IMAGE);
+  assert.equal(img.getAttribute('data-mr-src'), 'https://tracker.example/pixel.png');
+  assert.equal(img.getAttribute('data-mr-loaded'), 'true');
+  assert.ok(tauriCalls.some(([cmd, args]) => cmd === 'fetch_image' &&
+    args.url === 'https://tracker.example/pixel.png'));
   assert.equal(window.document.getElementById('sb-load-images').hidden, true);
 });
 
@@ -387,14 +397,28 @@ test('URL gambar tetap utuh di Markdown walau ditahan', () => {
 test('setMarkdown mereset izin gambar untuk dokumen berikutnya', async () => {
   api.setMarkdown('![foto](https://tracker.example/pixel.png)\n');
   await api.loadRemoteImages();
-  assert.equal(api.quill.root.querySelector('img').getAttribute('src'),
-    'https://tracker.example/pixel.png');
+  assert.equal(api.quill.root.querySelector('img').getAttribute('src'), NATIVE_IMAGE);
 
   api.setMarkdown('![baru](https://tracker.example/lain.png)\n');
   const img = api.quill.root.querySelector('img');
   assert.ok(!/^https?:/i.test(img.getAttribute('src') || ''),
     'dokumen baru harus kembali diblokir');
   assert.equal(window.document.getElementById('sb-load-images').hidden, false);
+});
+
+test('payload native berupa URL jaringan ditolak dan placeholder tetap ada', async () => {
+  const original = nativeImageResponse;
+  nativeImageResponse = 'https://tracker.example/pixel.png';
+  try {
+    const n = await api.loadRemoteImages();
+    assert.equal(n, 0);
+    const img = api.quill.root.querySelector('img');
+    assert.ok(!/^https?:/i.test(img.getAttribute('src') || ''));
+    assert.equal(img.getAttribute('data-mr-loaded'), null);
+    assert.equal(window.document.getElementById('sb-load-images').hidden, false);
+  } finally {
+    nativeImageResponse = original;
+  }
 });
 
 

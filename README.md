@@ -127,20 +127,27 @@ Pemblokiran dilakukan berlapis, karena satu titik saja tidak cukup:
    sejak konstruksi agar tidak ada penulisan `src` jaringan walau sesaat.
    `value()` membaca `data-mr-src`, sehingga **Delta dan berkas `.md` tetap
    berisi URL asli** — tidak ada data yang hilang.
-4. **Allow-list per dokumen.** URL dimuat hanya setelah pengguna menekan
+4. **Persetujuan per dokumen.** URL dimuat hanya setelah pengguna menekan
    tombol **"Muat gambar"** di status bar, atau saat ia menyisipkan URL itu
    sendiri lewat dialog. Izin tidak pernah di-*persist* dan otomatis direset
    setiap dokumen diganti, sehingga berkas asing berikutnya kembali aman.
+5. **Downloader native + CSP.** Desktop tidak memuat URL remote di webview.
+   Perintah Rust `fetch_image` mengembalikan data URI raster yang sudah
+   divalidasi; `img-src` hanya berisi `'self' data: blob:` tanpa `https:`.
 
-**Trade-off yang perlu diketahui:** CSP masih mencantumkan `https:` pada
-`img-src` — itu memang diperlukan agar pemuatan atas izin eksplisit bisa
-berfungsi. Dengan demikian jaminan keamanan berada pada **lapisan aplikasi**
-(sanitasi + blot + tes), bukan pada CSP. Vektor yang diketahui sudah ditutup
-dan dikunci oleh tes, tetapi celah baru di masa depan tidak akan dicegah oleh
-CSP. Hardening lanjutan yang lebih kuat adalah memindahkan pengunduhan gambar
-ke perintah Rust dengan validasi ketat (batas ukuran, blokir alamat privat,
-`Content-Type: image/*`) lalu menyajikannya sebagai `data:`/skema kustom —
-dengan begitu `https:` bisa dihapus total dari CSP.
+Downloader membatasi URL 4 KiB, maksimum 3 redirect, timeout koneksi 5 detik
+dan total 12 detik, respons 8 MiB, serta 12 gambar per batch persetujuan.
+Skema hanya HTTP/HTTPS (`//host` dinormalkan ke HTTPS), kredensial URL,
+proxy, cookie store, dan redirect otomatis tidak digunakan. Setiap resolusi DNS
+harus seluruhnya beralamat publik dan di-pin ke request berikutnya untuk
+menahan DNS rebinding; setiap redirect divalidasi ulang. Hanya PNG, JPEG, GIF,
+dan WebP yang diterima. Isi benar-benar di-decode dengan batas 8192×8192 dan
+alokasi 128 MiB; SVG, MIME yang tidak cocok, serta payload rusak ditolak.
+
+Browser biasa tanpa Tauri tetap memakai fallback pemuatan langsung setelah
+izin eksplisit. Tes unit/jsdom mengunci alur dan validasi, tetapi **belum
+menggantikan inspeksi network pada webview desktop nyata**; checklist P01–P04
+tetap menjadi gerbang sebelum M3 dinyatakan selesai.
 
 ## Cara kerja konversi
 
@@ -253,9 +260,9 @@ Belum / perlu diperhatikan:
 - **Autosave ke berkas asli** belum ada (draf baru tersimpan di webview, bukan
   menimpa berkas `.md` yang sedang dibuka), dan belum ada daftar berkas terakhir.
 - **Batas `localStorage`** berlaku untuk draf (lihat bagian di atas).
-- **CSP `img-src` masih mengizinkan `https:`** demi fitur pemuatan gambar atas
-  izin eksplisit (lihat *Privasi gambar jarak jauh* di atas). Pemblokiran
-  otomatis sudah aktif, tetapi pertahanannya ada di lapisan aplikasi.
+- **Pemuatan gambar native** hanya menerima raster hingga 8 MiB setelah izin;
+  SVG tidak didukung. CSP sudah menolak `https:` pada `img-src`, tetapi inspeksi
+  network pada aplikasi desktop nyata masih harus dilakukan (lihat di atas).
 - **Raw HTML**, soft/hard line break, dan `:---` mengikuti batasan yang sudah
   dijelaskan di bagian konversi.
 - **Lisensi proyek** belum ditentukan. Yang ada saat ini hanya lisensi

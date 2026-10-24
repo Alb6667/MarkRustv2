@@ -260,10 +260,9 @@ export function isValidImageUrl(url) {
 }
 
 /**
- * Hitung gambar yang akan diambil dari jaringan.
- * CSP saat ini masih mengizinkan `img-src https:`, jadi membuka dokumen asing
- * memicu request eksternal. Status bar menampilkan jumlah ini supaya risikonya
- * terlihat oleh pengguna, bukan terjadi diam-diam.
+ * Hitung gambar remote untuk status/izin eksplisit. Desktop mengunduhnya lewat
+ * perintah Rust terbatas lalu memakai data URI; CSP tidak mengizinkan https
+ * pada img-src. Browser fallback tetap memerlukan klik/penyisipan eksplisit.
  */
 export function remoteImageCount(md) {
   const src = String(md == null ? '' : md);

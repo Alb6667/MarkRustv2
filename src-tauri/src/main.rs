@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod recovery;
+mod image_fetch;
 
 use std::fs;
 use std::path::PathBuf;
@@ -74,7 +75,7 @@ fn write_document(path: String, contents: String) -> Result<(), String> {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![read_document, write_document, recovery::write_recovery, recovery::read_recovery, recovery::clear_recovery, recovery::fresh_recovery, recovery::list_recoveries, recovery::select_recovery])
+        .invoke_handler(tauri::generate_handler![read_document, write_document, image_fetch::fetch_image, recovery::write_recovery, recovery::read_recovery, recovery::clear_recovery, recovery::fresh_recovery, recovery::list_recoveries, recovery::select_recovery])
         .setup(|app| {
             // Menu native tanpa accelerator: pintasan keyboard ditangani
             // terpusat di frontend. Kalau keduanya aktif, Ctrl+S bisa memicu

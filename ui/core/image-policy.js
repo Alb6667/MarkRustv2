@@ -50,6 +50,14 @@ export function isPlaceholderUrl(url) {
   return String(url || '').startsWith(IMAGE_PLACEHOLDER.slice(0, 40));
 }
 
+/** Only bounded raster payloads returned by the native downloader may enter
+ * the DOM in Tauri. In particular, never accept SVG or a network URL here. */
+export function isNativeImageDataUrl(url) {
+  const value = String(url || '');
+  return value.length <= 12 * 1024 * 1024 &&
+    /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/]+={0,2}$/i.test(value);
+}
+
 export function resetImagePolicy() {
   allowedUrls.clear();
   allowAllForCurrentDocument = false;

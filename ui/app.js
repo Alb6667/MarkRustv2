@@ -21,12 +21,12 @@ import {
   isValidImageUrl
 } from './core/markdown.js';
 import {
-  registerDividerBlot, registerHrMatcher,
+  registerDividerBlot, registerHrMatcher, revealImageSource,
   registerSafeImageBlot, registerImageMatcher, revealAllowedImages
 } from './core/quill-setup.js';
 import {
   resetImagePolicy, allowRemoteImage, allowAllRemoteImages,
-  isRemoteImageAllowed
+  isRemoteImageAllowed, isNativeImageDataUrl
 } from './core/image-policy.js';
 import {
   getTauriApi, openWithTauri, saveWithTauri, readBrowserFile,
@@ -135,7 +135,7 @@ function boot() {
     quill.focus();
   });
 
-  imageForm.addEventListener('submit', function (e) {
+  imageForm.addEventListener('submit', async function (e) {
     e.preventDefault();
     const clean = imageInput.value.trim();
     if (!isValidImageUrl(clean)) {
@@ -145,13 +145,15 @@ function boot() {
     }
     const idx = pendingImageRange ? pendingImageRange.index
       : (quill.getSelection(true) || { index: 0 }).index;
-    // URL dimasukkan sendiri lewat dialog => persetujuan eksplisit.
-    allowRemoteImage(clean);
+    // URL dimasukkan sendiri lewat dialog => persetujuan eksplisit. Browser
+    // fallback boleh memuat langsung; Tauri wajib lewat downloader native.
+    if (!tauri) allowRemoteImage(clean);
     quill.insertEmbed(idx, 'image', clean, 'user');
     quill.setSelection(idx + 1, 0, 'user');
     if (typeof imageDialog.close === 'function') imageDialog.close();
     else imageDialog.removeAttribute('open');
     quill.focus();
+    await loadRemoteImages(clean);
   });
 
   // `toolbar` sengaja dikirim sebagai ARRAY, bukan objek
@@ -725,7 +727,8 @@ function boot() {
     const blocked = [];
     for (let i = 0; i < held.length; i++) {
       const url = held[i].getAttribute('data-mr-src');
-      if (url && !isRemoteImageAllowed(url)) blocked.push(url);
+      const loaded = held[i].getAttribute('data-mr-loaded') === 'true';
+      if (url && !loaded && !isRemoteImageAllowed(url)) blocked.push(url);
     }
     const total = remoteImageCount(canonical);
 
@@ -744,21 +747,59 @@ function boot() {
     }
   }
 
-  async function loadRemoteImages() {
+  async function loadRemoteImages(onlyUrl) {
+    const selectedUrl = typeof onlyUrl === 'string' ? onlyUrl : null;
+    const generation = documentGeneration;
     const nodes = quill.root.querySelectorAll('img[data-mr-src]');
     const urls = [];
+    const seen = new Set();
     for (let i = 0; i < nodes.length; i++) {
-      const u = nodes[i].getAttribute('data-mr-src');
-      if (u) urls.push(u);
+      const url = nodes[i].getAttribute('data-mr-src');
+      const loaded = nodes[i].getAttribute('data-mr-loaded') === 'true';
+      if (!url || loaded || (selectedUrl && url !== selectedUrl) || seen.has(url)) continue;
+      seen.add(url);
+      urls.push(url);
     }
     if (!urls.length) return 0;
-    allowAllRemoteImages(urls);
-    const revealed = revealAllowedImages(quill);
-    updateStats();
-    return revealed;
+
+    if (!tauri) {
+      // Browser biasa tidak punya perintah Rust; pertahankan fallback eksplisit.
+      if (selectedUrl) allowRemoteImage(selectedUrl);
+      else allowAllRemoteImages(urls);
+      const revealed = revealAllowedImages(quill);
+      updateStats();
+      return revealed;
+    }
+
+    // Satu batch persetujuan dibatasi. Sisa gambar tetap ber-placeholder dan
+    // dapat diminta lewat klik berikutnya; setiap URL punya batas redirect Rust.
+    let loadedCount = 0;
+    let failed = 0;
+    let firstError = '';
+    btnLoadImages.disabled = true;
+    try {
+      for (const url of urls.slice(0, 12)) {
+        try {
+          const source = await tauri.core.invoke('fetch_image', { url });
+          if (generation !== documentGeneration) break;
+          if (!isNativeImageDataUrl(source)) throw new Error('Payload gambar native tidak valid');
+          loadedCount += revealImageSource(quill, url, source);
+        } catch (err) {
+          failed++;
+          if (!firstError) firstError = String(err && err.message ? err.message : err);
+        }
+      }
+    } finally {
+      btnLoadImages.disabled = false;
+      updateStats();
+    }
+    if (failed && generation === documentGeneration) {
+      await showError(tauri, failed + ' gambar gagal dimuat. ' + firstError);
+    }
+    return loadedCount;
   }
 
-  btnLoadImages.addEventListener('click', loadRemoteImages);
+  btnLoadImages.addEventListener('click', function () { loadRemoteImages(); });
 
   // Debounce: serializeLines() berjalan tiap ketikan kalau tidak ditunda.
   function scheduleStats() {

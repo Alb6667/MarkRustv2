@@ -47,6 +47,7 @@ Gunakan dokumen sintetis dan folder uji, bukan berkas kerja satu-satunya.
 | P01 | Buka Markdown/HTML dengan gambar remote, srcset, CSS url(), //host | Amati network inspector: tidak ada request tanpa izin; bila ada, FAIL keamanan | BELUM DIUJI |
 | P02 | Muat gambar berizin, toggle mode, simpan, buka dokumen lain | URL/alt tetap; izin tidak bocor ke dokumen berikutnya | BELUM DIUJI |
 | P03 | Paste HTML/gambar remote dari clipboard nyata | Tidak ada fetch sebelum izin, termasuk DOM sementara; uji network, bukan hanya DOM final | BELUM DIUJI |
+| P04 | Server uji downloader: valid/redirect, DNS campuran, loopback/private, SVG/rusak/oversize/timeout | Hanya raster valid berizin tampil; setiap redirect/IP privat dan kegagalan batas ditolak tanpa merusak URL Markdown | BELUM DIUJI |
 
 ## Gerbang kelulusan
 

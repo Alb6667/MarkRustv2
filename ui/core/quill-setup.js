@@ -4,7 +4,7 @@
  * perilaku di webview Tauri (bukan tiruan yang bisa menyimpang).
  */
 import {
-  IMAGE_PLACEHOLDER, shouldBlockRemoteImage
+  IMAGE_PLACEHOLDER, shouldBlockRemoteImage, isRemoteImageAllowed
 } from './image-policy.js';
 
 const registered = new WeakSet();
@@ -92,15 +92,31 @@ export function registerImageMatcher(quill, Quill) {
   });
 }
 
-/** Setelah diizinkan, ganti placeholder yang masih ada dengan URL aslinya. */
+/** Replace one held URL with an already validated local data source. The
+ * original remote URL stays in data-mr-src for Delta/Markdown round-trip. */
+export function revealImageSource(quill, original, source) {
+  if (!quill || !quill.root || !original || !source) return 0;
+  const nodes = quill.root.querySelectorAll('img[data-mr-src]');
+  let count = 0;
+  for (let i = 0; i < nodes.length; i++) {
+    if (nodes[i].getAttribute('data-mr-src') !== original) continue;
+    nodes[i].setAttribute('src', source);
+    nodes[i].setAttribute('data-mr-loaded', 'true');
+    count++;
+  }
+  return count;
+}
+
+/** Browser fallback: reveal only URLs explicitly allowed for this document. */
 export function revealAllowedImages(quill) {
   if (!quill || !quill.root) return 0;
   const nodes = quill.root.querySelectorAll('img[data-mr-src]');
   let count = 0;
   for (let i = 0; i < nodes.length; i++) {
     const original = nodes[i].getAttribute('data-mr-src');
-    if (!original) continue;
+    if (!original || !isRemoteImageAllowed(original)) continue;
     nodes[i].setAttribute('src', original);
+    nodes[i].setAttribute('data-mr-loaded', 'true');
     count++;
   }
   return count;

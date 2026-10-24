@@ -75,6 +75,19 @@ request privat ditolak, termasuk setelah redirect/DNS resolution.
 **Catatan:** M3 dapat dikerjakan setelah fondasi M1 stabil, tetapi harus selesai
 sebelum mengklaim privasi jaringan yang ditegakkan oleh CSP.
 
+### Pelaksanaan M3 — kode tersedia, validasi native terbuka
+
+- `fetch_image` Rust memvalidasi skema/kredensial, seluruh IP hasil DNS dan
+  setiap redirect, mem-pin alamat tujuan, menonaktifkan proxy/cookie store,
+  membatasi timeout, 3 redirect dan respons 8 MiB.
+- Hanya PNG/JPEG/GIF/WebP yang lolos decode dengan batas dimensi/alokasi; hasil
+  menjadi data URI dan URL Markdown asli tetap di model.
+- UI membatasi 12 gambar per batch persetujuan. `https:` sudah dihapus dari
+  `img-src`; tes jsdom juga menolak payload native berupa URL jaringan.
+- M3 **belum ditutup**: uji network P01–P04 pada webview nyata dan uji server
+  redirect/DNS terkontrol masih harus membuktikan perilaku runtime. Build CI dan
+  tes helper Rust bukan pengganti bukti tersebut.
+
 ## M4 — Build reproducible dan kesiapan distribusi
 
 **Tujuan:** orang lain dapat membangun dan memasang versi yang sama.
@@ -159,7 +172,7 @@ menolak dokumen kotor. Race drop saat pembacaan dan konfirmasi tertunda kini
 memiliki tes regresi. Audit gambar juga memastikan blot tidak menulis URL remote
 ke `src` walau sesaat sebelum placeholder. Recovery yang dipilih “Nanti saja”
 kini dipisahkan dari sesi edit baru agar tidak ikut ditulis atau dibersihkan.
-Setelah perbaikan itu, 148 tes JS lulus secara lokal. Hasil, batas terbuka dan
+Setelah perbaikan itu, 151 tes JS lulus secara lokal. Hasil, batas terbuka dan
 langkah lanjut ada di STATUS-HANDOFF.md; matriks uji native ada di
 DESKTOP-TEST-CHECKLIST.md. M1/M2 tetap belum dinyatakan tuntas tanpa bukti
 runtime desktop.

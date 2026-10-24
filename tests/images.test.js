@@ -7,11 +7,11 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getEnv, parseMarkdown, createQuill } from './harness.js';
+import { getEnv, parseMarkdown, createQuill, readVendor } from './harness.js';
 import {
   resetImagePolicy, allowRemoteImage, allowAllRemoteImages,
   isRemoteImageAllowed, isRemoteImageUrl, shouldBlockRemoteImage,
-  IMAGE_PLACEHOLDER
+  isNativeImageDataUrl, IMAGE_PLACEHOLDER
 } from '../ui/core/image-policy.js';
 import { mdToQuillHtml, normalizeForQuill } from '../ui/core/markdown.js';
 import { linesFromQuill } from '../ui/core/serialize.js';
@@ -85,6 +85,20 @@ test('isRemoteImageUrl hanya mengenali http/https', () => {
 test('placeholder adalah data URI lokal, bukan URL jaringan', () => {
   assert.ok(IMAGE_PLACEHOLDER.startsWith('data:image/svg+xml'));
   assert.equal(isRemoteImageUrl(IMAGE_PLACEHOLDER), false);
+});
+
+test('payload native hanya menerima data URI raster, bukan SVG atau URL', () => {
+  assert.equal(isNativeImageDataUrl('data:image/png;base64,iVBORw0KGgo='), true);
+  assert.equal(isNativeImageDataUrl('data:image/svg+xml;base64,PHN2Zz4='), false);
+  assert.equal(isNativeImageDataUrl(REMOTE), false);
+  assert.equal(isNativeImageDataUrl('data:image/png;base64,'), false);
+});
+
+test('CSP desktop tidak lagi mengizinkan gambar https langsung', () => {
+  const config = JSON.parse(readVendor('src-tauri/tauri.conf.json'));
+  const imgSrc = config.app.security.csp.split(';')
+    .map((part) => part.trim()).find((part) => part.startsWith('img-src '));
+  assert.equal(imgSrc, "img-src 'self' data: blob:");
 });
 
 test('kebijakan default memblokir; allow bekerja per-URL', () => {
