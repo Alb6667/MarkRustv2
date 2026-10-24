@@ -179,9 +179,12 @@ di runtime. Menu native sengaja tidak memasang accelerator: pintasan keyboard
 dipusatkan di frontend agar tidak ada dobel-trigger `Ctrl+S`.
 
 > `Cargo.lock` di repo belum mencantumkan `tauri-plugin-dialog` karena sandbox
-> ini tidak punya toolchain Rust. CI menyimpan lockfile hasil resolusi sebagai
-> artifak **`cargo-lock`** pada job build Linux — salin ke `src-tauri/` setelah
-> build pertama (atau cukup jalankan `cargo build` sekali secara lokal).
+> pengembangan ini tidak punya toolchain Rust. `cargo build` tanpa `--locked`
+> akan memperbaruinya otomatis, jadi aplikasi tetap bisa dibangun. Untuk
+> merapikan: buka halaman **GitHub Actions → run CI terbaru → job
+> `Build Rust (ubuntu-latest)` → Artifacts → `cargo-lock`**, lalu salin isinya
+> ke `src-tauri/Cargo.lock`. Atau cukup jalankan `cargo build` sekali di mesin
+> lokal dan commit hasilnya.
 
 ## Status & batasan yang diketahui
 
