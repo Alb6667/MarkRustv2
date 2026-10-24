@@ -75,15 +75,18 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    /* Jarak seragam untuk semua anak. Sebelumnya gap 4px masih ditambah
-       margin pada .brand (8px) dan .sep (6px), sehingga jarak antar elemen
-       menjadi tidak rata: 12px, 10px, 4px, 4px. Sekarang cukup satu nilai. */
-    gap: 10px;
-    padding: 6px 12px;
-    background: var(--bg-base);
-    border-bottom: 1px solid var(--border);
+    gap: 8px;
+    padding: 8px 14px;
+    /* Lapisan frosted: konten editor yang lewat di bawahnya saat auto-hide
+       terlihat buram, bukan tertutup panel solid. Bila backdrop-filter tidak
+       didukung, warna rgba ini tetap menjadi fallback yang terbaca. */
+    background: rgba(30, 30, 46, 0.82);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: none;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
     flex-shrink: 0;
-    min-height: 46px;
+    min-height: 48px;
     -webkit-app-region: drag;
     transition: margin-top 0.18s ease, opacity 0.18s ease;
   }
@@ -91,36 +94,26 @@
 
   /* Auto-hide: toolbar digeser ke atas melewati batas jendela sebesar
      tingginya sendiri, bukan sekadar opacity 0. Kalau hanya disamarkan,
-     ia tetap menempati ruang dan menyisakan celah kosong 46px di atas
+     ia tetap menempati ruang dan menyisakan celah kosong 48px di atas
      editor. Dengan margin-top negatif, ruangnya diserap editor.
      Tingginya diukur dari JS karena toolbar bisa membungkus menjadi dua
      baris di jendela sempit — angka tetap tidak akan cukup. */
   #app.tb-hidden #toolbar {
-    margin-top: calc(-1 * var(--toolbar-h, 46px));
+    margin-top: calc(-1 * var(--toolbar-h, 48px));
     opacity: 0;
     pointer-events: none;
   }
 
+  /* Brand hanya simbol ◆ — kompak, tidak perlu disembunyikan di jendela
+     sempit lagi. Aksen dipakai pelan: tidak ada teks yang bersaing dengannya. */
   .brand {
     flex: none;
-    font-weight: 700;
-    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    font-size: 15px;
+    line-height: 1;
     color: var(--accent);
-  }
-
-  .sep {
-    flex: none;
-    width: 1px;
-    height: 22px;
-    background: var(--border);
-  }
-
-  /* Di jendela sempit, nama aplikasi dan pemisahnya dilepas lebih dulu.
-     Keduanya murni hiasan (~105px), sedangkan kontrol format tidak bisa
-     mengecil — kalau yang dikorbankan justru tombol format, mereka akan
-     membungkus menjadi tumpukan dua-tiga baris sebelum waktunya. */
-  @media (max-width: 960px) {
-    .brand, .sep { display: none; }
+    opacity: 0.9;
   }
 
   /* Wadah toolbar Quill: boleh mengecil, isinya yang membungkus.
@@ -142,61 +135,44 @@
   }
 
   /* Kelompok kontrol (Heading | B I U S | warna | list | ...).
-     Diberi pemisah tipis supaya batas kelompok terbaca. Sebelumnya kelompok
-     hanya dipisahkan jarak 4px, sehingga semua tombol tampak sebagai satu
-     baris yang rata dan sulit dipindai. */
+     Minimalis: batas kelompok dibedakan dengan jarak, bukan garis 1px. */
   .ql-toolbar.ql-snow .ql-formats {
     flex: none;
     margin-right: 0 !important;
     display: flex;
     align-items: center;
     gap: 2px;
-    position: relative;
   }
-  /* Garis pemisah digambar di tepi kiri kelompok (left:0), jadi jarak ke
-     kiri dan ke kanan garis harus sama — 5px — supaya pemisahnya tampak
-     berada di tengah celah, bukan menempel ke kelompok sebelumnya. */
   .ql-toolbar.ql-snow .ql-formats + .ql-formats {
-    padding-left: 5px;
-    margin-left: 5px;
-  }
-  .ql-toolbar.ql-snow .ql-formats + .ql-formats::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 1px;
-    height: 18px;
-    background: var(--border);
+    margin-left: 6px;
   }
 
-  /* Tombol format: Bold, Italic, Underline, Strike, list, quote, code, ... */
+  /* Tombol format ghost: transparan saat diam, permukaan hanya muncul saat
+     hover/focus. Bold, Italic, Underline, Strike, list, quote, code, ... */
   .ql-toolbar.ql-snow button {
     width: 32px !important;
     height: 32px !important;
-    border-radius: 6px !important;
+    border: none !important;
+    border-radius: 8px !important;
+    background: transparent !important;
     display: inline-flex !important;
     align-items: center;
     justify-content: center;
     padding: 0 !important;
-    transition: background-color 0.12s ease;
+    transition: background-color 0.14s ease;
   }
   .ql-toolbar.ql-snow button:hover {
-    background: var(--bg-surface) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
   }
   .ql-toolbar.ql-snow button:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -2px;
   }
 
-  /* Keadaan aktif: tinta aksen + ikon aksen, bukan blok biru penuh.
-     Beberapa toggle bisa menyala bersamaan (mis. Bold + Italic), dan blok
-     biru solid membuat barisnya berat. Latar #333c57 = 1.50:1 terhadap
-     base, ikon aksen di atasnya 5.2:1 — tetap jelas terbaca. */
+  /* Keadaan aktif: tint aksen lembut tanpa ring tambahan — beberapa toggle
+     bisa menyala bersamaan (mis. Bold + Italic), jadi bobotnya harus ringan. */
   .ql-toolbar.ql-snow button.ql-active {
     background: var(--accent-tint) !important;
-    box-shadow: inset 0 0 0 1px rgba(137, 180, 250, 0.35);
   }
   .ql-toolbar.ql-snow button.ql-active:hover {
     background: rgba(137, 180, 250, 0.28) !important;
@@ -222,18 +198,20 @@
     fill: var(--accent) !important;
   }
 
-  /* Picker (Heading, warna teks, warna latar) — diberi tinggi dan radius
-     yang sama dengan tombol agar bobot visualnya konsisten. */
+  /* Picker (Heading, warna teks, warna latar) — bahasa ghost yang sama
+     dengan tombol: tanpa border saat diam, permukaan muncul saat hover,
+     tinggi dan radius konsisten (32px, radius 8). */
   .ql-toolbar.ql-snow .ql-picker {
     color: var(--text-dim) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 6px !important;
+    border: none !important;
+    border-radius: 8px !important;
+    background: transparent !important;
     height: 32px !important;
     padding: 0 6px !important;
     font-size: 12px !important;
     display: inline-flex !important;
     align-items: center;
-    transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+    transition: background-color 0.14s ease, color 0.14s ease;
   }
 
   /* Picker warna berisi ikon, bukan teks — jadi diperlakukan seperti tombol:
@@ -249,8 +227,7 @@
   }
   .ql-toolbar.ql-snow .ql-picker:hover {
     color: var(--text) !important;
-    background: var(--bg-surface) !important;
-    border-color: var(--border-hi) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
   }
   .ql-toolbar.ql-snow .ql-picker:focus-visible {
     outline: 2px solid var(--accent);
@@ -259,7 +236,7 @@
   .ql-toolbar.ql-snow .ql-picker.ql-expanded .ql-picker-options {
     background: var(--bg-surface) !important;
     border: 1px solid var(--border-hi) !important;
-    border-radius: 6px !important;
+    border-radius: 8px !important;
     padding: 4px !important;
     box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
   }
@@ -293,39 +270,47 @@
   .toolbar-right {
     flex: none;
     display: flex;
-    gap: 4px;
+    gap: 6px;
     align-items: center;
   }
 
-  .mode-btn {
-    padding: 4px 12px;
-    /* 32px, sama dengan tombol format Quill. Sebelumnya 30px, jadi tombol
-       mode tampil 2px lebih pendek dari tetangganya sebaris. */
-    height: 32px;
-    /* --border-hi (3.4:1): batas kontrol interaktif harus terbaca,
-       sedangkan --border dipakai untuk pemisah struktural yang halus. */
-    border: 1px solid var(--border-hi);
-    border-radius: 6px;
+  /* Segmented control: satu wadah pill, dua segmen tanpa kotak masing-masing.
+     Tinggi total 32px (28px segmen + 2px padding atas-bawah). */
+  .mode-switch {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
     background: var(--bg-surface);
+    border-radius: 999px;
+  }
+
+  .mode-btn {
+    height: 28px;
+    padding: 0 14px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
     color: var(--text-muted);
     font-size: 12px;
     font-family: var(--font-sans);
     cursor: pointer;
-    transition: all 0.15s;
+    white-space: nowrap;
+    transition: background-color 0.14s ease, color 0.14s ease;
   }
-  .mode-btn:hover { background: var(--bg-overlay); color: var(--text); }
+  .mode-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
   .mode-btn:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
+  /* Aktif: tint lembut + tinta aksen, bukan blok aksen solid. */
   .mode-btn.active {
-    background: var(--accent);
-    color: var(--bg-deep);
-    border-color: var(--accent);
+    background: var(--accent-tint);
+    color: var(--accent);
     font-weight: 600;
   }
 
-  /* Tombol pin — kotak 30x30 agar sejajar dengan tombol mode di sebelahnya.
+  /* Tombol pin ghost — bahasa visual yang sama dengan tombol format Quill.
      Statusnya dibaca dari atribut aria-pressed, jadi cukup satu sumber
      kebenaran: tidak ada kelas terpisah yang bisa tidak sinkron. */
   .pin-btn {
@@ -335,12 +320,21 @@
     width: 32px;
     height: 32px;
     padding: 0;
-    margin-left: 4px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background-color 0.14s ease, color 0.14s ease;
+  }
+  .pin-btn:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
+  .pin-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
   }
   .pin-btn[aria-pressed="true"] {
-    background: var(--accent);
-    color: var(--bg-deep);
-    border-color: var(--accent);
+    background: var(--accent-tint);
+    color: var(--accent);
   }
 
   /* ====== EDITOR AREA ====== */
@@ -619,15 +613,18 @@
 <div id="app">
   <!-- TOOLBAR -->
   <div id="toolbar">
-    <span class="brand">◆ MarkRust</span>
-    <div class="sep"></div>
+    <!-- Brand cukup simbol: nama aplikasi disampaikan lewat aria-label. -->
+    <span class="brand" role="img" aria-label="MarkRust">◆</span>
     <div id="quill-toolbar"></div>
     <div class="toolbar-right">
-      <button class="mode-btn active" id="btn-wysiwyg" type="button">✦ WYSIWYG</button>
-      <button class="mode-btn" id="btn-markdown" type="button">⟨/⟩ Markdown</button>
+      <!-- Segmented control: dua mode dalam satu wadah pill. -->
+      <div class="mode-switch" role="group" aria-label="Mode editor">
+        <button class="mode-btn active" id="btn-wysiwyg" type="button">✦ WYSIWYG</button>
+        <button class="mode-btn" id="btn-markdown" type="button">⟨/⟩ Markdown</button>
+      </div>
       <!-- Pin: menahan toolbar supaya selalu tampil dan auto-hide mati.
            Ikonnya pin dorong bergaris, selaras dengan ikon Quill di kiri. -->
-      <button class="mode-btn pin-btn" id="btn-pin" type="button"
+      <button class="pin-btn" id="btn-pin" type="button"
               aria-pressed="false" title="Pin toolbar (selalu tampil)"
               aria-label="Pin toolbar">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
