@@ -69,8 +69,10 @@
   /* =========================================================
    * 3. Inisialisasi Quill
    * =======================================================*/
+  // Header berupa tombol independen (H1/H2/H3), bukan dropdown — sama seperti
+  // tombol format lain. Klik pada header yang aktif mengembalikan teks normal.
   var toolbarOptions = [
-    [{ 'header': [1, 2, 3, false] }],
+    [{ header: '1' }, { header: '2' }, { header: '3' }],
     ['bold', 'italic', 'underline', 'strike'],
     [{ 'color': [] }, { 'background': [] }],
     [{ 'list': 'ordered' }, { 'list': 'bullet' }],
