@@ -16,7 +16,8 @@ fn lock_session(dir: &Path) -> Result<Option<Session>, String> {
         .truncate(false).open(dir.join("session.lock")).map_err(|e| e.to_string())?;
     match lock.try_lock_exclusive() {
         Ok(()) => Ok(Some(Session { dir: dir.to_path_buf(), _lock: lock })),
-        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock
+            || e.raw_os_error() == fs2::lock_contended_error().raw_os_error() => Ok(None),
         Err(e) => Err(e.to_string()),
     }
 }
