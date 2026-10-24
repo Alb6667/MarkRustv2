@@ -1,4 +1,5 @@
 {
+  "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capability for main window",
   "windows": ["main"],

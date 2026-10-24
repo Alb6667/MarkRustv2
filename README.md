@@ -36,8 +36,9 @@ Seluruh library sudah di-vendoring, jadi tetap tidak butuh internet saat runtime
 
 ```
 ui/
-  index.html        markup + tema
-  app.js            logika UI: inisialisasi Quill, toolbar, mode, statistik
+  index.html        markup saja (tanpa CSS inline)
+  app.css           seluruh tema & gaya editor
+  app.js            logika UI: inisialisasi Quill, toolbar, mode, status bar
   core/
     serialize.js    Delta Quill -> Markdown (murni, tanpa DOM/Quill instance)
     markdown.js     Markdown -> HTML untuk Quill + statistik dokumen
@@ -45,11 +46,14 @@ ui/
   vendor/           library pihak ketiga (lokal, offline-ready)
 tests/
   harness.js        jsdom + Quill/marked hasil vendoring (bukan mock)
-  *.test.js         unit + round-trip sungguhan
+  *.test.js         unit + round-trip sungguhan + smoke test boot aplikasi
 .github/workflows/  CI: tes Node + build Rust di Linux/Windows/macOS
 src-tauri/
   src/main.rs       shell Tauri (jendela + webview)
   tauri.conf.json   konfigurasi aplikasi
+  capabilities/     izin IPC (ACL) untuk jendela utama
+  icons/            ikon desktop saja (mobile belum didukung)
+  gen/schemas/      DI-GENERATE saat build — tidak di-commit
 ```
 
 Modul `ui/core/` sengaja **murni** (tidak menyentuh `window`, tidak menyimpan
@@ -72,19 +76,40 @@ Tes berjalan di `node:test` + jsdom dan menggunakan berkas `ui/vendor/` yang
 tiruan. Cakupan: heading, indentasi & bahasa code block, fence backtick
 bersarang, list campuran bernomor, task list, alignment tabel, garis pemisah,
 tautan/gambar, warna, underline, escape teks, penolakan injeksi CSS/URL,
-idempotensi serialisasi, serta paritas jumlah kata lintas mode.
+idempotensi serialisasi, paritas jumlah kata lintas mode, dan smoke test yang
+memuat `index.html` + `app.js` sungguhan untuk menjaga wiring DOM tetap utuh.
 
 Beberapa perilaku yang sengaja didokumentasikan sebagai **batasan yang diketahui**
 (diuji supaya perubahannya ketahuan): soft line break melebur jadi spasi sesuai
 CommonMark, hard break di paragraf biasa berubah jadi dua paragraf, dan raw HTML
 kehilangan tag pembungkusnya.
 
+## Keputusan UI
+
+- **Status bar selalu tampil** (mode, indikator belum disimpan, jumlah kata &
+  karakter, peringatan gambar jarak jauh). Widget jumlah kata yang mengambang
+  dan memudar sendiri sudah dihapus — informasinya jadi tidak terbaca.
+- **Toolbar tampil secara default.** Auto-hide tetap tersedia lewat tombol pin,
+  dan tidak pernah menyembunyikan diri saat ada teks terseleksi.
+- **Tanpa region-drag kustom.** `decorations: true` sudah memberi title bar
+  native; CSS lama tidak bekerja di Linux/WebKitGTK.
+- **Dialog gambar memakai `<dialog>` native**, bukan `window.prompt` yang tidak
+  reliabel di WKWebView/Tauri. Hanya `http://` dan `https://` yang diterima.
+
+### Catatan privasi gambar
+
+CSP masih mengizinkan `img-src https:`. Artinya, membuka dokumen Markdown dari
+pihak lain dapat memicu permintaan jaringan ke URL gambar di dalamnya. Status
+bar kini **menampilkan jumlah gambar jarak jauh** supaya ini tidak terjadi
+diam-diam. Pemblokiran penuh membutuhkan blot gambar kustom yang menyimpan URL
+asli tanpa memuatnya — belum diimplementasikan.
+
 ## Cara kerja konversi
 
 | Arah | Jalur |
 | --- | --- |
 | Markdown → WYSIWYG | `marked` → normalisasi DOM → `quill.clipboard.dangerouslyPasteHTML()` |
-| WYSIWYG → Markdown | `quill.getLines()` → serializer Delta bawaan (`quillToMarkdown`) |
+| WYSIWYG → Markdown | `linesFromQuill()` → `serializeLines()` di `ui/core/serialize.js` |
 
 Konversi balik **tidak** memakai Turndown. Quill 2 tidak memakai DOM standar — code block
 adalah `<div>`, bullet list direpresentasikan sebagai `<ol data-list="bullet">`, dan warna

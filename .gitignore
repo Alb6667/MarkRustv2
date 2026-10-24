@@ -1,9 +1,15 @@
-# Artefak build Rust (Cargo membuat folder "target", bukan ".target")
+# Artefak build Rust
 target/
 
-# Dependensi Node (jika kelak ada tooling frontend)
+# Dependensi tooling dev/test. Catatan: runtime aplikasi TETAP tanpa Node,
+# tanpa bundler, tanpa framework — ini hanya untuk `npm test`.
 node_modules/
 
-# Beras OS
+# Berkas OS
 .DS_Store
 Thumbs.db
+
+# Skema ACL Tauri di-generate ulang tiap build, dan tiap OS menulis versi
+# berbeda. Konvensi template resmi Tauri: jangan di-commit, biarkan dibuat
+# oleh `tauri-build` saat build pertama.
+src-tauri/gen/schemas/

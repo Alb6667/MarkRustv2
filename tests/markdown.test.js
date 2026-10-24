@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { getEnv, parseMarkdown } from './harness.js';
 import {
   escapeHtml, normalizeForQuill, mdToQuillHtml,
-  plainTextFromMarkdown, documentStats
+  plainTextFromMarkdown, documentStats, remoteImageCount, isValidImageUrl
 } from '../ui/core/markdown.js';
 
 const { DOMParser } = getEnv();
@@ -92,4 +92,21 @@ test('documentStats stabil terhadap whitespace tambahan', () => {
   const a = documentStats('satu dua tiga\n');
   const b = documentStats('satu   dua\n\n\ntiga\n\n');
   assert.deepEqual(a, b);
+});
+
+test('isValidImageUrl hanya menerima http/https, menolak data: dan javascript:', () => {
+  assert.equal(isValidImageUrl('https://x.test/a.png'), true);
+  assert.equal(isValidImageUrl('  http://x.test/a.png  '), true);
+  assert.equal(isValidImageUrl('data:image/png;base64,AAAA'), false);
+  assert.equal(isValidImageUrl('javascript:alert(1)'), false);
+  assert.equal(isValidImageUrl('file:///etc/passwd'), false);
+  assert.equal(isValidImageUrl(''), false);
+});
+
+test('remoteImageCount mendeteksi gambar Markdown dan tag <img>', () => {
+  assert.equal(remoteImageCount('teks biasa\n'), 0);
+  assert.equal(remoteImageCount('![alt](https://x.test/a.png)\n'), 1);
+  assert.equal(remoteImageCount('![a](https://x.test/a.png) dan ![b](http://y.test/b.png)'), 2);
+  assert.equal(remoteImageCount('<img src="https://x.test/a.png">'), 1);
+  assert.equal(remoteImageCount('![lokal](gambar.png)'), 0);
 });

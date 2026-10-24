@@ -1,0 +1,694 @@
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    /* Tangga abu-abu netral (tanpa semburat biru/ungu). Elevasi dibedakan
+       oleh kecerahan, bukan warna: deep < base < surface < overlay.
+       Aksen biru tunggal dipakai hemat — hanya tautan, fokus, dan kontrol
+       aktif fungsional. Kontras teks terhadap --bg-base berada di atas
+       ambang WCAG AA 4.5:1 untuk teks kecil. */
+    --bg-deep:    #0d0f12;  /* paling luar, kanvas jendela */
+    --bg-base:    #15181c;  /* editor dan toolbar */
+    --bg-surface: #1d2127;  /* kontrol terangkat, hover */
+    --bg-overlay: #282d35;  /* hover tingkat tinggi, panel dropdown */
+    --border:     #262b32;  /* garis struktural (hairline) */
+    --border-hi:  #3a414b;  /* tepi kontrol interaktif */
+    --text:       #e6e9ed;
+    --text-dim:   #a7adb6;
+    --text-muted: #7c848f;
+    --accent:     #5b9dff;  /* satu-satunya warna fungsional */
+    --code-bg:    #101317;  /* blok kode, lebih gelap dari base */
+    --code-text:  #d8dce2;
+    --radius:     8px;
+    /* Lebar maksimum teks (ukuran baca). 40rem = 640px, cukup untuk ~80 kolom kode. */
+    --measure:    40rem;
+    --font-sans:  'Inter', 'Segoe UI', system-ui, sans-serif;
+    --font-mono:  'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg-deep);
+    color: var(--text);
+    font-family: var(--font-sans);
+    overflow: hidden;
+    /* Membuat kontrol native (dropdown <select> bahasa, scrollbar) ikut gelap. */
+    color-scheme: dark;
+  }
+
+  ::selection {
+    background: rgba(91, 157, 255, 0.22);
+    color: #fff;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    /* Memotong toolbar yang sedang bergeser ke atas saat disembunyikan. */
+    overflow: hidden;
+  }
+
+  /* ====== TOOLBAR ======
+     min-height (bukan height) + wrap: kalau jendela dipersempit, kontrol
+     Quill pindah ke baris kedua. Tanpa ini toolbar meluber dan tombol mode
+     terdorong keluar layar, sehingga tidak bisa diklik lagi. */
+  #toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--bg-base);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    min-height: 40px;
+    transition: margin-top 0.18s ease, opacity 0.18s ease;
+  }
+  /* Sengaja tanpa region-drag kustom. `decorations: true` di tauri.conf.json
+     sudah memberi title bar native, jadi ia mubazir (dan tidak bekerja di
+     Linux/WebKitGTK). */
+
+  /* Auto-hide: toolbar digeser ke atas melewati batas jendela sebesar
+     tingginya sendiri, bukan sekadar opacity 0. Kalau hanya disamarkan,
+     ia tetap menempati ruang dan menyisakan celah kosong 40px di atas
+     editor. Dengan margin-top negatif, ruangnya diserap editor.
+     Tingginya diukur dari JS karena toolbar bisa membungkus menjadi dua
+     baris di jendela sempit — angka tetap tidak akan cukup. */
+  #app.tb-hidden #toolbar {
+    margin-top: calc(-1 * var(--toolbar-h, 40px));
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Brand hanya simbol ◆, netral — aksen dicadangkan untuk kontrol fungsional. */
+  .brand {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    font-size: 13px;
+    line-height: 1;
+    color: var(--text-muted);
+  }
+
+  /* Pemisah hairline antara pin dan simbol brand di zona kanan. */
+  .tb-divider {
+    flex: none;
+    width: 1px;
+    height: 16px;
+    background: var(--border);
+  }
+
+  /* Wadah toolbar Quill: boleh mengecil, isinya yang membungkus.
+     Tanpa min-width:0, flex item tidak mau menyusut di bawah ukuran isinya. */
+  #quill-toolbar {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /* Override Quill toolbar */
+  .ql-toolbar.ql-snow {
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap !important;
+    gap: 2px;
+  }
+
+  /* Zona kiri (switch mode) dan kanan (pin + brand) berlebar konten,
+     zona tengah flex:1 sehingga kelompok ikon berada tepat di tengah. */
+  .toolbar-left {
+    flex: none;
+    display: flex;
+    align-items: center;
+  }
+
+  /* Kelompok kontrol (H1 H2 H3 | B I U S | warna | list | ...).
+     Batas kelompok: hairline netral + jarak seragam 8px antar grup,
+     2px antar tombol di dalam grup. */
+  .ql-toolbar.ql-snow .ql-formats {
+    flex: none;
+    margin-right: 0 !important;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    position: relative;
+  }
+  .ql-toolbar.ql-snow .ql-formats + .ql-formats {
+    margin-left: 8px;
+  }
+  .ql-toolbar.ql-snow .ql-formats + .ql-formats::before {
+    content: '';
+    position: absolute;
+    left: -4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1px;
+    height: 14px;
+    background: var(--border);
+  }
+
+  /* Tombol format ghost: transparan saat diam, permukaan hanya muncul saat
+     hover/focus. Bold, Italic, Underline, Strike, list, quote, code, ... */
+  .ql-toolbar.ql-snow button {
+    width: 28px !important;
+    height: 28px !important;
+    border: none !important;
+    border-radius: 7px !important;
+    background: transparent !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+    transition: background-color 0.14s ease;
+  }
+  /* Bawaan Quill: svg { height: 100% } sehingga ikon memenuhi tombol.
+     Ukur eksplisit agar proporsional dengan tombol 28px. */
+  .ql-toolbar.ql-snow button svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* Tombol header independen H1/H2/H3 — label teks, bukan ikon SVG bawaan.
+     Lebar mengikuti konten, bukan kotak 28px seperti tombol ikon. */
+  .ql-toolbar.ql-snow button.ql-header {
+    width: auto !important;
+    padding: 0 8px !important;
+  }
+  .ql-toolbar.ql-snow button.ql-header svg {
+    display: none;
+  }
+  .ql-toolbar.ql-snow button.ql-header::before {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    line-height: 1;
+    color: var(--text-dim);
+    transition: color 0.14s ease;
+  }
+  .ql-toolbar.ql-snow button.ql-header[value="1"]::before { content: 'H1'; }
+  .ql-toolbar.ql-snow button.ql-header[value="2"]::before { content: 'H2'; }
+  .ql-toolbar.ql-snow button.ql-header[value="3"]::before { content: 'H3'; }
+  .ql-toolbar.ql-snow button.ql-header:hover::before { color: var(--text); }
+  .ql-toolbar.ql-snow button.ql-header.ql-active::before { color: var(--text); }
+  .ql-toolbar.ql-snow button:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+  }
+  .ql-toolbar.ql-snow button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  /* Keadaan aktif: permukaan abu terangkat, ikon putih — tanpa warna aksen.
+     Beberapa toggle bisa menyala bersamaan (mis. Bold + Italic). */
+  .ql-toolbar.ql-snow button.ql-active {
+    background: rgba(255, 255, 255, 0.10) !important;
+  }
+  .ql-toolbar.ql-snow button.ql-active:hover {
+    background: rgba(255, 255, 255, 0.13) !important;
+  }
+
+  .ql-toolbar.ql-snow button .ql-stroke {
+    stroke: var(--text-dim) !important;
+  }
+  .ql-toolbar.ql-snow button:hover .ql-stroke {
+    stroke: var(--text) !important;
+  }
+  .ql-toolbar.ql-snow button.ql-active .ql-stroke {
+    stroke: var(--text) !important;
+  }
+
+  .ql-toolbar.ql-snow button .ql-fill {
+    fill: var(--text-dim) !important;
+  }
+  .ql-toolbar.ql-snow button:hover .ql-fill {
+    fill: var(--text) !important;
+  }
+  .ql-toolbar.ql-snow button.ql-active .ql-fill {
+    fill: var(--text) !important;
+  }
+
+  /* Picker warna (teks dan latar) — bahasa ghost yang sama dengan tombol:
+     tanpa border saat diam, permukaan muncul saat hover, tinggi 28px. */
+  .ql-toolbar.ql-snow .ql-picker {
+    color: var(--text-dim) !important;
+    border: none !important;
+    border-radius: 7px !important;
+    background: transparent !important;
+    height: 28px !important;
+    padding: 0 6px !important;
+    font-size: 12px !important;
+    display: inline-flex !important;
+    align-items: center;
+    transition: background-color 0.14s ease, color 0.14s ease;
+  }
+
+  /* Picker warna berisi ikon, bukan teks — diperlakukan seperti tombol:
+     28x28 persegi tanpa padding tambahan. */
+  .ql-toolbar.ql-snow .ql-picker.ql-color-picker {
+    width: 28px;
+    padding: 0 !important;
+  }
+  /* Ikon di dalam picker (ember cat, caret) disamakan dengan ikon tombol. */
+  .ql-toolbar.ql-snow .ql-picker svg {
+    width: 15px;
+    height: 15px;
+  }
+  .ql-toolbar.ql-snow .ql-picker:hover {
+    color: var(--text) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+  }
+  .ql-toolbar.ql-snow .ql-picker:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .ql-toolbar.ql-snow .ql-picker.ql-expanded .ql-picker-options {
+    background: var(--bg-surface) !important;
+    border: 1px solid var(--border-hi) !important;
+    border-radius: 8px !important;
+    padding: 4px !important;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  }
+  .ql-toolbar.ql-snow .ql-picker.ql-expanded .ql-picker-options .ql-picker-item {
+    color: var(--text) !important;
+    padding: 4px 8px !important;
+    border-radius: 4px !important;
+  }
+  .ql-toolbar.ql-snow .ql-picker.ql-expanded .ql-picker-options .ql-picker-item:hover {
+    background: var(--bg-overlay) !important;
+    color: var(--text) !important;
+  }
+  .ql-toolbar.ql-snow .ql-picker-label .ql-stroke {
+    stroke: var(--text-dim) !important;
+  }
+  .ql-toolbar.ql-snow .ql-picker:hover .ql-picker-label .ql-stroke {
+    stroke: var(--text) !important;
+  }
+  /* Label picker aktif: cukup cerah, jangan biru. Tema snow bawaan Quill
+     memberi warnanya sendiri sehingga harus di-override. */
+  .ql-toolbar.ql-snow .ql-picker-label.ql-active,
+  .ql-toolbar.ql-snow .ql-picker-label.ql-active .ql-stroke {
+    color: var(--text) !important;
+    stroke: var(--text) !important;
+  }
+
+  /* Ikon "ember cat" pada picker warna latar memakai .ql-fill, yang oleh
+     Quill diwarnai #444 — nyaris tak terlihat di toolbar gelap.
+     Sengaja TANPA !important: kalau Quill menetapkan warna terpilih lewat
+     style inline, warna itu tetap menang. */
+  .ql-toolbar.ql-snow .ql-picker .ql-fill {
+    fill: var(--text-dim);
+  }
+  .ql-toolbar.ql-snow .ql-picker:hover .ql-fill {
+    fill: var(--text);
+  }
+
+  .toolbar-right {
+    flex: none;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  /* Segmented control: wadah inset gelap, segmen aktif berupa permukaan
+     terangkat. Khusus simbol: dua tombol kotak 24px, tinggi total 28px. */
+  .mode-switch {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+
+  .mode-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background-color 0.14s ease, color 0.14s ease;
+  }
+  .mode-btn svg { width: 14px; height: 14px; }
+  .mode-glyph {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1;
+  }
+  .mode-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+  .mode-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  /* Aktif: permukaan terangkat + ikon putih, tanpa warna aksen. */
+  .mode-btn.active {
+    background: var(--bg-overlay);
+    color: var(--text);
+  }
+
+  /* Tombol pin ghost — bahasa visual yang sama dengan tombol format Quill.
+     Statusnya dibaca dari atribut aria-pressed, jadi cukup satu sumber
+     kebenaran: tidak ada kelas terpisah yang bisa tidak sinkron. */
+  .pin-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background-color 0.14s ease, color 0.14s ease;
+  }
+  .pin-btn:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
+  .pin-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .pin-btn[aria-pressed="true"] {
+    background: rgba(255, 255, 255, 0.10);
+    color: var(--text);
+  }
+
+  /* ====== EDITOR AREA ====== */
+  #editor-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-base);
+  }
+
+  /* Quill container */
+  .ql-container.ql-snow {
+    border: none !important;
+    flex: 1;
+    overflow: hidden;
+    font-family: var(--font-sans) !important;
+    font-size: 15px !important;
+    color: var(--text) !important;
+  }
+
+  /* Gutter kiri/kanan dihitung supaya teks terpusat pada --measure.
+     Mengatur padding (bukan max-width pada anak-anaknya) menjaga placeholder,
+     seleksi, dan elemen lebar penuh tetap sejajar. */
+  .ql-editor {
+    padding: 24px max(40px, calc((100% - var(--measure)) / 2)) !important;
+    line-height: 1.8 !important;
+    color: var(--text) !important;
+    overflow-y: auto !important;
+    /* Cegah teks bergeser saat scrollbar muncul/hilang. */
+    scrollbar-gutter: stable;
+  }
+
+  /* Scrollbar: properti standar (Firefox) sekaligus pseudo-element WebKit. */
+  .ql-editor,
+  #raw-view textarea {
+    scrollbar-width: thin;
+    scrollbar-color: var(--bg-overlay) transparent;
+  }
+  .ql-editor::-webkit-scrollbar,
+  #raw-view textarea::-webkit-scrollbar { width: 8px; }
+  .ql-editor::-webkit-scrollbar-track,
+  #raw-view textarea::-webkit-scrollbar-track { background: transparent; }
+  .ql-editor::-webkit-scrollbar-thumb,
+  #raw-view textarea::-webkit-scrollbar-thumb {
+    background: var(--bg-overlay);
+    border-radius: 4px;
+  }
+  .ql-editor::-webkit-scrollbar-thumb:hover,
+  #raw-view textarea::-webkit-scrollbar-thumb:hover { background: var(--border-hi); }
+
+  /* Quill placeholder — harus sejajar dengan teks, bukan dengan tepi jendela. */
+  .ql-editor.ql-blank::before {
+    color: var(--text-muted) !important;
+    font-style: normal !important;
+    left: max(40px, calc((100% - var(--measure)) / 2)) !important;
+    right: auto !important;
+    width: var(--measure) !important;
+    max-width: calc(100% - 80px) !important;
+  }
+
+  /* ====== WYSIWYG CONTENT STYLES ======
+     Hirarki dibedakan lewat bobot dan kecerahan teks, bukan warna.
+     Satu-satunya warna di isi konten adalah tautan. */
+  .ql-editor h1 {
+    font-size: 2em !important;
+    font-weight: 800 !important;
+    color: var(--text) !important;
+    margin: 0.4em 0 0.2em !important;
+  }
+  .ql-editor h2 {
+    font-size: 1.5em !important;
+    font-weight: 700 !important;
+    color: var(--text) !important;
+    margin: 0.6em 0 0.2em !important;
+    padding-bottom: 0.1em;
+    border-bottom: 1px solid var(--border);
+  }
+  .ql-editor h3 {
+    font-size: 1.25em !important;
+    font-weight: 600 !important;
+    color: var(--text-dim) !important;
+    margin: 0.5em 0 0.2em !important;
+  }
+  .ql-editor p {
+    margin: 0.3em 0 !important;
+  }
+  .ql-editor strong { color: #fff !important; }
+  .ql-editor em { color: inherit !important; }
+  .ql-editor s { color: var(--text-muted) !important; }
+
+  .ql-editor a {
+    color: var(--accent) !important;
+    text-decoration: underline !important;
+  }
+
+  .ql-editor blockquote {
+    border-left: 3px solid var(--border-hi) !important;
+    background: rgba(255, 255, 255, 0.03) !important;
+    padding: 8px 16px !important;
+    margin: 0.5em 0 !important;
+    border-radius: 0 var(--radius) var(--radius) 0 !important;
+    color: var(--text-dim) !important;
+  }
+
+  .ql-editor hr {
+    border: none !important;
+    height: 1px !important;
+    background: var(--border) !important;
+    margin: 1em 0 !important;
+  }
+
+  .ql-editor img {
+    max-width: 100%;
+    border-radius: var(--radius);
+  }
+
+  /* Inline code: permukaan gelap, teks netral */
+  .ql-editor code {
+    background: var(--code-bg) !important;
+    color: var(--code-text) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 13px !important;
+    border-radius: 4px !important;
+    padding: 2px 5px !important;
+  }
+
+  /* ====== CODE BLOCK ======
+     Quill 2 merender code block sebagai DIV (.ql-code-block-container),
+     BUKAN <pre>. Selector lama ".ql-editor pre" tidak pernah cocok. */
+  .ql-editor .ql-code-block-container {
+    position: relative;
+    background: var(--code-bg) !important;
+    color: var(--code-text) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius) !important;
+    padding: 30px 18px 14px !important;
+    margin: 0.5em 0 !important;
+    font-family: var(--font-mono) !important;
+    font-size: 13px !important;
+    line-height: 1.6 !important;
+    white-space: pre-wrap !important;
+  }
+
+  .ql-editor .ql-code-block-container .ql-code-block {
+    font-family: var(--font-mono) !important;
+    font-size: 13px !important;
+    line-height: 1.6 !important;
+    min-height: 1.6em;
+  }
+
+  /* Dropdown pemilih bahasa yang disuntikkan modul syntax Quill.
+     min-width mencegah teks bahasa terpotong ("Rust" jadi "Rus…"). */
+  .ql-editor .ql-code-block-container > .ql-ui {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    min-width: 76px;
+    height: 22px;
+    padding: 0 8px;
+    font-family: var(--font-sans) !important;
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    outline: none;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.15s, border-color 0.15s;
+  }
+  .ql-editor .ql-code-block-container > .ql-ui:hover,
+  .ql-editor .ql-code-block-container > .ql-ui:focus-visible {
+    border-color: var(--border-hi);
+  }
+  .ql-editor .ql-code-block-container:hover > .ql-ui { opacity: 1; }
+
+  /* Warna token dari tema highlight.js (night-owl) */
+  .ql-editor .ql-token { background: transparent !important; }
+
+  .ql-editor ul > li::before,
+  .ql-editor ol > li::before {
+    color: var(--text-muted) !important;
+  }
+
+  /* ====== TABLE ====== */
+  .ql-editor table {
+    border-collapse: collapse;
+    margin: 0.6em 0;
+  }
+  .ql-editor table td {
+    border: 1px solid var(--border) !important;
+    padding: 6px 12px !important;
+    min-width: 60px;
+  }
+
+  /* ====== RAW MARKDOWN VIEW ====== */
+  #raw-view {
+    display: none;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* Gutter yang sama dengan .ql-editor supaya teks tidak melompat saat ganti mode. */
+  #raw-view textarea {
+    width: 100%;
+    height: 100%;
+    padding: 24px max(40px, calc((100% - var(--measure)) / 2));
+    background: var(--bg-base);
+    color: var(--text);
+    border: none;
+    outline: none;
+    resize: none;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.7;
+    overflow-y: auto;
+    /* pre-wrap: baris panjang membungkus. 'pre' memaksa scroll horizontal. */
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    scrollbar-gutter: stable;
+    tab-size: 2;
+  }
+
+  #raw-view textarea::placeholder { color: var(--text-muted); }
+
+  /* ====== STATUS BAR ======
+     Selalu tampil. Status bar yang hilang sendiri membuat informasi jumlah
+     kata tidak bisa dibaca diam-diam; lebih jujur menyediakan ruang 28px
+     yang konsisten di bawah editor. */
+  #statusbar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 28px;
+    padding: 0 14px;
+    background: var(--bg-deep);
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    user-select: none;
+  }
+  #statusbar .sb-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  #statusbar .sb-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  #statusbar .sb-sep {
+    flex: none;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--border-hi);
+  }
+  #statusbar .sb-mode { color: var(--text-dim); }
+  #sb-notice {
+    color: var(--text-dim);
+    max-width: 46ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #sb-notice[hidden] { display: none; }
+  #sb-dirty { color: var(--text); }
+  #sb-dirty[hidden] { display: none; }
+
+  /* ====== DIALOG URL GAMBAR ======
+     window.prompt tidak reliabel di WKWebView/Tauri (bisa gagal diam-diam
+     di macOS), jadi pakai <dialog> native yang ikut tema aplikasi. */
+  #image-dialog {
+    border: 1px solid var(--border-hi);
+    border-radius: var(--radius);
+    background: var(--bg-surface);
+    color: var(--text);
+    padding: 18px;
+    width: min(420px, calc(100vw - 40px));
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+  }
+  #image-dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+  #image-dialog h2 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  #image-dialog p { font-size: 12px; color: var(--text-dim); margin-bottom: 12px; }
+  #image-dialog input {
+    width: 100%;
+    padding: 8px 10px;
+    background: var(--bg-deep);
+    border: 1px solid var(--border-hi);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    outline: none;
+  }
+  #image-dialog input:focus-visible { border-color: var(--accent); }
+  #image-dialog .dlg-error { min-height: 16px; font-size: 11px; color: #ff9b9b; margin-top: 6px; }
+  #image-dialog .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+  #image-dialog button {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border-hi);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  #image-dialog button:hover { background: var(--bg-overlay); color: var(--text); }
+  #image-dialog button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #image-dialog button.primary { background: var(--accent); border-color: var(--accent); color: #0d0f12; font-weight: 600; }
+
+  /* Hormati preferensi "kurangi animasi" — toolbar tetap boleh
+     hilang-muncul, hanya tanpa geseran animasi. */
+  @media (prefers-reduced-motion: reduce) {
+    #toolbar { transition: none; }
+  }

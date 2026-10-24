@@ -16,7 +16,9 @@ import {
 } from './core/serialize.js';
 import {
   mdToQuillHtml,
-  documentStats
+  documentStats,
+  remoteImageCount,
+  isValidImageUrl
 } from './core/markdown.js';
 import {
   registerDividerBlot,
@@ -90,22 +92,54 @@ function boot() {
   ];
 
   // Gambar dimasukkan lewat URL. `data:image/` sengaja DITOLAK: base64 membuat
-  // berkas .md membengkak dan tidak bisa dibaca ulang sebagai tautan.
+  // berkas .md membengkak. Dialog memakai <dialog> native, bukan window.prompt
+  // yang tidak reliabel di WKWebView/Tauri (bisa gagal diam-diam di macOS).
+  let pendingImageRange = null;
+  const imageDialog = document.getElementById('image-dialog');
+  const imageForm = document.getElementById('image-form');
+  const imageInput = document.getElementById('image-url');
+  const imageError = document.getElementById('image-error');
+
   function imageHandler() {
-    const range = quill.getSelection(true);
-    const url = window.prompt('URL gambar:');
-    if (!url) return;
-    const clean = url.trim();
-    if (!/^https?:\/\//i.test(clean)) {
-      window.alert('URL tidak valid.\nGunakan http:// atau https://');
-      return;
-    }
-    quill.insertEmbed(range.index, 'image', clean, 'user');
-    quill.setSelection(range.index + 1, 0, 'user');
+    pendingImageRange = quill.getSelection(true);
+    imageInput.value = '';
+    imageError.textContent = '';
+    if (typeof imageDialog.showModal === 'function') imageDialog.showModal();
+    else imageDialog.setAttribute('open', '');
+    imageInput.focus();
   }
 
+  document.getElementById('image-cancel').addEventListener('click', function () {
+    if (typeof imageDialog.close === 'function') imageDialog.close();
+    else imageDialog.removeAttribute('open');
+    quill.focus();
+  });
+
+  imageForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    const clean = imageInput.value.trim();
+    if (!isValidImageUrl(clean)) {
+      imageError.textContent = 'Gunakan alamat http:// atau https://';
+      imageInput.focus();
+      return;
+    }
+    const idx = pendingImageRange ? pendingImageRange.index
+      : (quill.getSelection(true) || { index: 0 }).index;
+    quill.insertEmbed(idx, 'image', clean, 'user');
+    quill.setSelection(idx + 1, 0, 'user');
+    if (typeof imageDialog.close === 'function') imageDialog.close();
+    else imageDialog.removeAttribute('open');
+    quill.focus();
+  });
+
+  // `toolbar` sengaja dikirim sebagai ARRAY, bukan objek
+  // `{ container: [...], handlers: {...} }`. Quill 2.0.3 menormalkan opsi
+  // dengan `u.toolbar.constructor !== Object`; objek yang dibuat di realm
+  // berbeda (mis. saat app.js dimuat sebagai ES module di luar realm skrip
+  // UMD) akan dianggap bukan Object, dibungkus dua kali, dan modul toolbar
+  // gagal dibuat. Array selalu aman; handler khusus dipasang setelah init.
   const modules = {
-    toolbar: { container: toolbarOptions, handlers: { image: imageHandler } },
+    toolbar: toolbarOptions,
     clipboard: { matchVisual: false }
   };
   if (hljs) {
@@ -118,10 +152,16 @@ function boot() {
     placeholder: 'Mulai mengetik di sini... (mode WYSIWYG)'
   });
 
-  // Pindahkan toolbar Quill ke dalam toolbar aplikasi.
+  // Pindahkan toolbar Quill ke dalam toolbar aplikasi, lalu pasang handler
+  // gambar kustom (menggantikan handler bawaan Quill yang memakai prompt).
   const toolbarModule = quill.getModule('toolbar');
-  if (toolbarModule && toolbarModule.container) {
-    document.getElementById('quill-toolbar').appendChild(toolbarModule.container);
+  if (toolbarModule) {
+    if (toolbarModule.container) {
+      document.getElementById('quill-toolbar').appendChild(toolbarModule.container);
+    }
+    if (typeof toolbarModule.addHandler === 'function') {
+      toolbarModule.addHandler('image', imageHandler);
+    }
   }
 
   registerHrMatcher(quill, Quill);
@@ -147,23 +187,24 @@ function boot() {
   const textarea = document.getElementById('raw-textarea');
   const btnWysiwyg = document.getElementById('btn-wysiwyg');
   const btnMarkdown = document.getElementById('btn-markdown');
-  const wordcount = document.getElementById('wordcount');
+  const sbMode = document.getElementById('sb-mode');
+  const sbDirty = document.getElementById('sb-dirty');
+  const sbNotice = document.getElementById('sb-notice');
   let currentMode = 'wysiwyg';
+  let dirty = false;
 
   function getCanonicalMarkdown() {
     return currentMode === 'markdown' ? textarea.value : quillToMarkdown();
   }
 
-  /* Widget word count disembunyikan saat menganggur dan dimunculkan sementara
-     ketika pointer bergerak atau saat ada ketikan. */
-  let wcTimer = null;
-  function revealWordCount() {
-    if (!wordcount) return;
-    wordcount.classList.add('is-visible');
-    clearTimeout(wcTimer);
-    wcTimer = setTimeout(function () {
-      wordcount.classList.remove('is-visible');
-    }, 1800);
+  function markDirty() {
+    dirty = true;
+    sbDirty.hidden = false;
+  }
+
+  function markClean() {
+    dirty = false;
+    sbDirty.hidden = true;
   }
 
   /* ---------------------------------------------------------
@@ -217,13 +258,7 @@ function boot() {
     }, GRACE);
   }
 
-  let lastReveal = 0;
   function onPointerMove(e) {
-    // Throttle: pointermove bisa ratusan kali per detik; reset timer di setiap
-    // event itu sia-sia. 120ms cukup untuk membuat widget tetap terasa hidup.
-    const now = Date.now();
-    if (now - lastReveal > 120) { revealWordCount(); lastReveal = now; }
-
     if (typeof e.clientY === 'number') lastY = e.clientY;
     if (pinned || tbFocus) { app.classList.remove('tb-hidden'); return; }
 
@@ -297,6 +332,7 @@ function boot() {
     currentMode = mode;
     btnWysiwyg.classList.toggle('active', mode === 'wysiwyg');
     btnMarkdown.classList.toggle('active', mode === 'markdown');
+    sbMode.textContent = mode === 'wysiwyg' ? 'WYSIWYG' : 'Markdown';
     updateStats();
   }
 
@@ -308,10 +344,16 @@ function boot() {
    * ======================================================= */
   let statsTimer = null;
   function updateStats() {
-    const stats = documentStats(getCanonicalMarkdown());
+    const canonical = getCanonicalMarkdown();
+    const stats = documentStats(canonical);
     document.getElementById('stat-words').textContent = 'Words: ' + stats.words;
     document.getElementById('stat-chars').textContent = 'Chars: ' + stats.chars;
-    revealWordCount();
+
+    const remote = remoteImageCount(canonical);
+    sbNotice.hidden = remote === 0;
+    sbNotice.textContent = remote
+      ? remote + ' gambar jarak jauh akan dimuat dari jaringan'
+      : '';
   }
 
   // Debounce: serializeLines() berjalan tiap ketikan kalau tidak ditunda.
@@ -320,8 +362,14 @@ function boot() {
     statsTimer = setTimeout(updateStats, 120);
   }
 
-  quill.on('text-change', scheduleStats);
-  textarea.addEventListener('input', scheduleStats);
+  quill.on('text-change', function (delta, oldDelta, source) {
+    if (source === 'user') markDirty();
+    scheduleStats();
+  });
+  textarea.addEventListener('input', function () {
+    markDirty();
+    scheduleStats();
+  });
 
   /* =========================================================
    * 7. Konten awal
@@ -376,6 +424,8 @@ function boot() {
     getMarkdown: getCanonicalMarkdown,
     setMarkdown: loadMarkdownIntoQuill,
     getStats: function () { return documentStats(getCanonicalMarkdown()); },
+    isDirty: function () { return dirty; },
+    markClean: markClean,
     isToolbarPinned: function () { return pinned; },
     isToolbarVisible: isToolbarShown
   };

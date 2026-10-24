@@ -177,6 +177,27 @@ export function plainTextFromMarkdown(md) {
   return text;
 }
 
+/** Satu-satunya skema URL gambar yang diterima. */
+export function isValidImageUrl(url) {
+  return /^https?:\/\/[^\s]+$/i.test(String(url == null ? '' : url).trim());
+}
+
+/**
+ * Hitung gambar yang akan diambil dari jaringan.
+ * CSP saat ini masih mengizinkan `img-src https:`, jadi membuka dokumen asing
+ * memicu request eksternal. Status bar menampilkan jumlah ini supaya risikonya
+ * terlihat oleh pengguna, bukan terjadi diam-diam.
+ */
+export function remoteImageCount(md) {
+  const src = String(md == null ? '' : md);
+  let count = 0;
+  const fromMarkdown = /!\[[^\]]*\]\(\s*<?(https?:\/\/[^\s)>]+)/gi;
+  while (fromMarkdown.exec(src)) count++;
+  const fromHtml = /<img\b[^>]*\bsrc\s*=\s*["']?(https?:\/\/[^"'\s>]+)/gi;
+  while (fromHtml.exec(src)) count++;
+  return count;
+}
+
 /** { words, chars } dari sumber Markdown, identik untuk mode WYSIWYG & raw. */
 export function documentStats(md) {
   var normalized = plainTextFromMarkdown(md)

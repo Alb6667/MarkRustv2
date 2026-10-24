@@ -24,17 +24,8 @@ const emptyRect = () => ({
 });
 const emptyRects = () => Object.assign([], { item: () => null });
 
-let env = null;
-
-export function getEnv() {
-  if (env) return env;
-
-  const dom = new JSDOM(
-    '<!doctype html><html><body></body></html>',
-    { runScripts: 'outside-only', pretendToBeVisual: true, url: 'http://localhost/' }
-  );
-  const { window } = dom;
-
+/** Pasang global browser yang dibutuhkan Quill ke globalThis Node. */
+export function installGlobals(window) {
   for (const k of [
     'DOMParser', 'Node', 'Element', 'HTMLElement', 'NodeFilter', 'MutationObserver',
     'DOMRect', 'Range', 'Selection', 'Event', 'CustomEvent', 'KeyboardEvent',
@@ -56,9 +47,19 @@ export function getEnv() {
   }
   window.Element.prototype.getClientRects = window.Element.prototype.getClientRects || emptyRects;
   window.Element.prototype.getBoundingClientRect = window.Element.prototype.getBoundingClientRect || emptyRect;
-  if (!window.document.createRange().createContextualFragment) {
-    // aman: jsdom sudah menyediakannya, ini hanya jaga-jaga versi lama
-  }
+  return window;
+}
+
+let env = null;
+
+export function getEnv() {
+  if (env) return env;
+
+  const dom = new JSDOM(
+    '<!doctype html><html><body></body></html>',
+    { runScripts: 'outside-only', pretendToBeVisual: true, url: 'http://localhost/' }
+  );
+  const window = installGlobals(dom.window);
 
   window.eval(readVendor('ui/vendor/quill/quill.js'));
   window.eval(readVendor('ui/vendor/marked/marked.umd.js'));
