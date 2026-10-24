@@ -499,24 +499,53 @@
 
   #raw-view textarea::placeholder { color: var(--text-muted); }
 
-  /* ====== STATUS BAR ====== */
-  #statusbar {
+  /* ====== WORD COUNT MENGAMBANG ======
+     Pengganti status bar. Menempel di sudut kanan bawah, tersembunyi sampai
+     pointer bergerak atau ada ketikan, lalu memudar sendiri setelah 1.8 detik. */
+  #wordcount {
+    position: fixed;
+    right: 18px;
+    bottom: 12px;
+    z-index: 20;
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 4px 16px;
-    background: var(--bg-base);
-    border-top: 1px solid var(--border);
+    gap: 8px;
+    padding: 5px 11px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
     font-size: 11px;
+    /* Angka lebar tetap supaya tidak bergeser saat hitungan berubah. */
+    font-variant-numeric: tabular-nums;
     color: var(--text-muted);
-    flex-shrink: 0;
-    height: 26px;
     user-select: none;
+    /* pointer-events:none permanen — tidak pernah menghalangi klik atau
+       seleksi teks di bawahnya. Karena itu ia tidak bisa di-hover langsung;
+       yang memicu kemunculannya adalah pointermove pada #app. */
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
   }
-  #statusbar .right {
-    margin-left: auto;
-    display: flex;
-    gap: 12px;
+  #wordcount.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+  #wordcount .wc-sep {
+    flex: none;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--border-hi);
+  }
+
+  /* Hormati preferensi "kurangi animasi" — hilangkan hanya pergeserannya. */
+  @media (prefers-reduced-motion: reduce) {
+    #wordcount {
+      transform: none;
+      transition: opacity 0.18s ease;
+    }
   }
 </style>
 </head>
@@ -544,13 +573,14 @@
     <textarea id="raw-textarea" placeholder="Raw Markdown..." spellcheck="false"></textarea>
   </div>
 
-  <!-- STATUS BAR -->
-  <div id="statusbar">
+  <!-- WORD COUNT MENGAMBANG
+       Tersembunyi saat tidak aktif, muncul saat pointer bergerak atau saat
+       mengetik, lalu memudar sendiri. pointer-events:none permanen supaya
+       tidak pernah menghalangi klik pada teks di bawahnya. -->
+  <div id="wordcount">
     <span id="stat-words">Words: 0</span>
+    <span class="wc-sep" aria-hidden="true"></span>
     <span id="stat-chars">Chars: 0</span>
-    <div class="right">
-      <span id="stat-mode">WYSIWYG</span>
-    </div>
   </div>
 </div>
 

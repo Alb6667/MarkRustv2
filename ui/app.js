@@ -504,8 +504,21 @@
   var textarea = document.getElementById('raw-textarea');
   var btnWysiwyg = document.getElementById('btn-wysiwyg');
   var btnMarkdown = document.getElementById('btn-markdown');
-  var statMode = document.getElementById('stat-mode');
+  var wordcount = document.getElementById('wordcount');
   var currentMode = 'wysiwyg';
+
+  /* Widget word count disembunyikan saat menganggur dan dimunculkan sementara
+     ketika pointer bergerak atau saat ada ketikan. */
+  var wcTimer = null;
+  function revealWordCount() {
+    if (!wordcount) return;
+    wordcount.classList.add('is-visible');
+    clearTimeout(wcTimer);
+    wcTimer = setTimeout(function () {
+      wordcount.classList.remove('is-visible');
+    }, 1800);
+  }
+  document.getElementById('app').addEventListener('pointermove', revealWordCount);
 
   function loadMarkdownIntoQuill(md) {
     var html = mdToQuillHtml(md);
@@ -532,7 +545,6 @@
     currentMode = mode;
     btnWysiwyg.classList.toggle('active', mode === 'wysiwyg');
     btnMarkdown.classList.toggle('active', mode === 'markdown');
-    statMode.textContent = mode === 'wysiwyg' ? 'WYSIWYG' : 'Markdown';
     updateStats();
   }
 
@@ -565,6 +577,9 @@
     document.getElementById('stat-words').textContent = 'Words: ' + countWords(raw);
     document.getElementById('stat-chars').textContent =
       'Chars: ' + (currentMode === 'wysiwyg' ? quill.getText().length : textarea.value.length);
+
+    // Muncul sesaat saat hitungan berubah, lalu memudar lagi.
+    revealWordCount();
   }
 
   quill.on('text-change', updateStats);
