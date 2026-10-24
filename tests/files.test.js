@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   basename, isMarkdownFilename, titleFor, openWithTauri, saveWithTauri,
-  confirmDiscard, MARKDOWN_FILTERS, DEFAULT_FILENAME, ALLOWED_EXTENSIONS
+  confirmDiscard, confirmSaveOnClose, confirmRestore,
+  MARKDOWN_FILTERS, DEFAULT_FILENAME, ALLOWED_EXTENSIONS
 } from '../ui/core/files.js';
 
 function fakeTauri(opts = {}) {
@@ -113,4 +114,54 @@ test('daftar ekstensi JS identik dengan validasi Rust di main.rs', () => {
   assert.ok(m, 'pola matches!(ext.as_str(), ...) tidak ditemukan di main.rs');
   const fromRust = Array.from(m[1].matchAll(/"([a-z]+)"/g), (x) => x[1]).sort();
   assert.deepEqual(fromRust, Array.from(ALLOWED_EXTENSIONS).sort());
+});
+
+
+test('confirmSaveOnClose memakai dialog native bila ada', async () => {
+  const t = fakeTauri();
+  assert.equal(await confirmSaveOnClose(t), true);
+  assert.match(t.calls[t.calls.length - 1][1], /Simpan sebelum keluar/);
+});
+
+test('confirmRestore memakai dialog native bila ada', async () => {
+  const t = fakeTauri({ askResult: false });
+  assert.equal(await confirmRestore(t, 'Pulihkan?'), false);
+});
+
+test('fallback browser: window.confirm dipakai saat Tauri tidak ada', async () => {
+  const original = globalThis.window;
+  const seen = [];
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true, writable: true,
+    value: { confirm: (msg) => { seen.push(msg); return true; } }
+  });
+  try {
+    assert.equal(await confirmDiscard(null), true);
+    assert.equal(await confirmSaveOnClose(null), true);
+    assert.equal(await confirmRestore(null, 'Pulihkan?'), true);
+    assert.equal(seen.length, 3);
+    assert.match(seen[0], /Perubahan belum disimpan/);
+    assert.match(seen[1], /Simpan sebelum keluar/);
+    assert.equal(seen[2], 'Pulihkan?');
+  } finally {
+    if (original === undefined) delete globalThis.window;
+    else Object.defineProperty(globalThis, 'window', {
+      configurable: true, writable: true, value: original
+    });
+  }
+});
+
+test('fallback tanpa window sama sekali -> false, tidak melempar', async () => {
+  const original = globalThis.window;
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true, writable: true, value: undefined
+  });
+  try {
+    assert.equal(await confirmSaveOnClose(null), false);
+  } finally {
+    if (original === undefined) delete globalThis.window;
+    else Object.defineProperty(globalThis, 'window', {
+      configurable: true, writable: true, value: original
+    });
+  }
 });

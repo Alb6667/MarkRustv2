@@ -26,9 +26,13 @@ import {
 } from './core/quill-setup.js';
 import {
   getTauriApi, openWithTauri, saveWithTauri, readBrowserFile,
-  downloadBrowserFile, confirmDiscard, showError, setWindowTitle,
-  basename, isMarkdownFilename, titleFor, DEFAULT_FILENAME
+  downloadBrowserFile, confirmDiscard, confirmSaveOnClose, confirmRestore,
+  showError, setWindowTitle, basename, isMarkdownFilename, titleFor,
+  DEFAULT_FILENAME
 } from './core/files.js';
+import {
+  readDraft, saveDraft, clearDraft, restoreMessage, DRAFT_KEY
+} from './core/drafts.js';
 
 const Quill = window.Quill;
 const marked = window.marked;
@@ -214,6 +218,52 @@ function boot() {
     setWindowTitle(tauri, titleFor(currentPath, dirty));
   }
 
+  /* ---------------------------------------------------------
+   * Draft recovery
+   *
+   * Konfirmasi tutup tidak cukup: force-quit / crash / Cmd+Q di macOS bisa
+   * melewati event close. Draf disimpan ke localStorage webview saat dokumen
+   * kotor, lalu ditawarkan kembali pada startup berikutnya.
+   * -------------------------------------------------------*/
+  let draftStorage = null;
+  try { draftStorage = window.localStorage || null; } catch (e) { draftStorage = null; }
+
+  const DRAFT_DEBOUNCE = 700;
+  let draftTimer = null;
+
+  function writeDraftNow() {
+    if (!dirty) return false;
+    return saveDraft(draftStorage, {
+      markdown: getCanonicalMarkdown(),
+      path: currentPath,
+      savedAt: Date.now()
+    });
+  }
+
+  /** Paksa tulis draf sekarang (dipakai sebelum dialog tutup / pagehide). */
+  function flushDraft() {
+    clearTimeout(draftTimer);
+    draftTimer = null;
+    return writeDraftNow();
+  }
+
+  function scheduleDraftSave() {
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(function () {
+      draftTimer = null;
+      writeDraftNow();
+    }, DRAFT_DEBOUNCE);
+    // Jangan biarkan timer debounce menahan proses Node saat pengujian.
+    try { if (draftTimer && typeof draftTimer.unref === 'function') draftTimer.unref(); }
+    catch (e) { /* browser mengembalikan angka */ }
+  }
+
+  function discardDraft() {
+    clearTimeout(draftTimer);
+    draftTimer = null;
+    clearDraft(draftStorage);
+  }
+
   function markDirty() {
     // Dijaga supaya IPC setTitle tidak dikirim pada setiap ketikan setelah
     // dokumen sudah berstatus kotor.
@@ -221,12 +271,16 @@ function boot() {
     dirty = true;
     sbDirty.hidden = false;
     refreshTitle();
+    scheduleDraftSave();
   }
 
   function markClean() {
     dirty = false;
     sbDirty.hidden = true;
     refreshTitle();
+    // SENGATA tidak menghapus draf di sini: markClean() juga dipanggil saat
+    // boot, dan itu akan menghilangkan draf sebelum sempat ditawarkan.
+    // Penghapusan dilakukan eksplisit oleh aksi simpan/buang di bawah.
   }
 
   /* ---------------------------------------------------------
@@ -398,6 +452,7 @@ function boot() {
 
   async function newDocument() {
     if (dirty && !(await confirmDiscard(tauri))) return false;
+    discardDraft();
     currentPath = null;
     applyDocument('');
     markClean();
@@ -410,6 +465,7 @@ function boot() {
     try {
       const result = tauri ? await openWithTauri(tauri) : await pickBrowserFile();
       if (!result) return false;
+      discardDraft();
       currentPath = result.path;
       applyDocument(result.contents);
       markClean();
@@ -433,6 +489,7 @@ function boot() {
           currentPath ? basename(currentPath) : DEFAULT_FILENAME, contents);
       }
       if (!savedPath) return false;
+      discardDraft();
       currentPath = savedPath;
       markClean();
       return true;
@@ -492,6 +549,7 @@ function boot() {
     }
     readBrowserFile(file).then(async function (result) {
       if (dirty && !(await confirmDiscard(tauri))) return;
+      discardDraft();
       currentPath = result.path;
       applyDocument(result.contents);
       markClean();
@@ -500,11 +558,55 @@ function boot() {
     });
   });
 
+  /* Konfirmasi tutup jendela native (tombol X / Alt+F4).
+     Tidak memakai preventDefault() secara permanen: bila handler async
+     selesai tanpa mencegah, Tauri meneruskan penutupan. Draf sudah ditulis
+     lebih dulu, jadi memilih "keluar tanpa menyimpan" tetap aman. */
+  let closeHandlerRegistered = false;
+  if (tauri && tauri.window && typeof tauri.window.getCurrentWindow === 'function') {
+    try {
+      const win = tauri.window.getCurrentWindow();
+      if (win && typeof win.onCloseRequested === 'function') {
+        win.onCloseRequested(async function (event) {
+          if (!dirty) return;
+          flushDraft();
+          const saveFirst = await confirmSaveOnClose(tauri);
+          if (!saveFirst) return; // draf tersimpan, tutup boleh dilanjutkan
+          const ok = await saveDocument(false);
+          if (!ok && event && typeof event.preventDefault === 'function') {
+            event.preventDefault(); // gagal menyimpan -> jangan tutup
+          }
+        });
+        closeHandlerRegistered = true;
+      }
+    } catch (e) { /* draf tetap menjadi jaminan */ }
+  }
+
+  /* Tawarkan pemulihan draf dari sesi sebelumnya. Dipanggil setelah konten
+     awal dimuat, sehingga pengguna punya pembanding sebelum memutuskan. */
+  async function restoreDraftIfAny() {
+    const draft = readDraft(draftStorage);
+    if (!draft) return false;
+    const ok = await confirmRestore(tauri, restoreMessage(draft.savedAt));
+    if (!ok) { discardDraft(); return false; }
+    currentPath = draft.path || null;
+    applyDocument(draft.markdown);
+    markClean();          // reset dulu supaya markDirty() tidak di-skip
+    markDirty();          // dokumen hasil pemulihan memang belum tersimpan
+    return true;
+  }
+
+  function onPageHide() { flushDraft(); }
+
   window.addEventListener('beforeunload', function (e) {
-    if (!dirty) return;
+    onPageHide();
+    // Di Tauri, konfirmasi sudah ditangani onCloseRequested. Mencegah di sini
+    // juga bisa memunculkan dialog webview kedua di atas dialog native.
+    if (tauri || !dirty) return;
     e.preventDefault();
     e.returnValue = '';
   });
+  window.addEventListener('pagehide', onPageHide);
 
   /* =========================================================
    * 6. Statistik — selalu dari sumber Markdown kanonik yang sama.
@@ -582,6 +684,7 @@ function boot() {
 
   loadMarkdownIntoQuill(defaultMarkdown);
   markClean();
+  restoreDraftIfAny();
 
   // Jembatan untuk pengujian dan untuk integrasi Tauri di kemudian hari.
   window.MarkRust = {
@@ -599,6 +702,11 @@ function boot() {
     openDocument: openDocument,
     saveDocument: saveDocument,
     handleMenuAction: handleMenuAction,
+    restoreDraftIfAny: restoreDraftIfAny,
+    flushDraft: flushDraft,
+    discardDraft: discardDraft,
+    draftKey: DRAFT_KEY,
+    isCloseHandlerRegistered: function () { return closeHandlerRegistered; },
     isToolbarPinned: function () { return pinned; },
     isToolbarVisible: isToolbarShown
   };

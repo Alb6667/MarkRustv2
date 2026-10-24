@@ -44,6 +44,7 @@ ui/
     markdown.js     Markdown -> HTML untuk Quill + statistik dokumen
     quill-setup.js  registrasi blot <hr> & matcher clipboard (dipakai app + tes)
   files.js        I/O dokumen: dialog Tauri + fallback browser
+  drafts.js       penyimpanan & pemulihan draf (murni, storage di-inject)
   vendor/           library pihak ketiga (lokal, offline-ready)
 tests/
   harness.js        jsdom + Quill/marked hasil vendoring (bukan mock)
@@ -186,17 +187,39 @@ dipusatkan di frontend agar tidak ada dobel-trigger `Ctrl+S`.
 > ke `src-tauri/Cargo.lock`. Atau cukup jalankan `cargo build` sekali di mesin
 > lokal dan commit hasilnya.
 
+## Keamanan tulisan: draf & konfirmasi tutup
+
+Ada **dua lapis** pelindung, karena konfirmasi tutup saja tidak cukup —
+*force quit*, crash proses, dan `Cmd+Q`/Dock Quit di macOS diketahui dapat
+melewati event *close* Tauri [10](https://github.com/tauri-apps/tauri/issues/13778).
+
+1. **Draft recovery (jaminan utama).** Saat dokumen berstatus kotor, isinya
+   disimpan berkala (debounce 700 ms) ke `localStorage` webview, lalu di-*flush*
+   pada `pagehide`/`beforeunload` dan sebelum dialog tutup. Saat aplikasi dibuka
+   berikutnya, pengguna ditanya apakah draf itu ingin dipulihkan. Draf dihapus
+   hanya setelah berkas benar-benar tersimpan, dokumen baru dibuat, berkas lain
+   dibuka, atau pengguna menolak pemulihan.
+2. **Konfirmasi tutup (UX).** `getCurrentWindow().onCloseRequested()` menawarkan
+   "Simpan sebelum keluar?" bila ada perubahan. Bila simpan gagal, penutupan
+   dicegah supaya data tidak hilang. Handler `beforeunload` hanya aktif di mode
+   browser agar tidak muncul dialog ganda di atas dialog native.
+
+Dengan begitu, memilih keluar tanpa menyimpan pun **tetap aman**: tulisannya
+masih bisa dipulihkan. Catatan: `localStorage` webview punya batas ukuran
+(umumnya beberapa MB); dokumen sangat besar dapat melewati batas itu, dan dalam
+kasus tersebut konfirmasi tutup menjadi satu-satunya pelindung.
+
 ## Status & batasan yang diketahui
 
 Sudah berfungsi: editing WYSIWYG, toggle Markdown, round-trip format, buka/
-simpan berkas, menu native, pintasan, drag-drop, dan statistik dokumen.
+simpan berkas, menu native, pintasan, drag-drop, statistik dokumen, konfirmasi
+tutup, dan pemulihan draf.
 
 Belum / perlu diperhatikan:
 
-- **Konfirmasi tutup jendela** belum mencegat tombol close native di Tauri
-  (baru `beforeunload` di webview), jadi perubahan belum tersimpan bisa hilang
-  jika aplikasi ditutup paksa.
-- **Belum ada autosave/backup** dan daftar berkas terakhir.
+- **Autosave ke berkas asli** belum ada (draf baru tersimpan di webview, bukan
+  menimpa berkas `.md` yang sedang dibuka), dan belum ada daftar berkas terakhir.
+- **Batas `localStorage`** berlaku untuk draf (lihat bagian di atas).
 - **Gambar jarak jauh** masih dimuat dari jaringan (lihat *Catatan privasi
   gambar* di atas); pemblokiran penuh butuh blot gambar kustom.
 - **Raw HTML**, soft/hard line break, dan `:---` mengikuti batasan yang sudah

@@ -25,22 +25,34 @@ window.eval(readVendor('ui/vendor/marked/marked.umd.js'));
 // (bukan fallback browser) yang benar-benar diuji.
 const tauriCalls = [];
 const titles = [];
+const asks = [];
+const closeHandlers = [];
+const destroyed = [];
+let nextAskResult = true;
+let failWrite = false;
 const DISK_DOC = '# Dokumen Dari Disk\n\nIsi dari berkas.\n';
 window.__TAURI__ = {
   core: {
     invoke: async (cmd, args) => {
       tauriCalls.push([cmd, args]);
+      if (cmd === 'write_document' && failWrite) throw new Error('disk penuh');
       return cmd === 'read_document' ? DISK_DOC : null;
     }
   },
   dialog: {
     open: async () => '/home/u/catatan.md',
     save: async () => '/home/u/catatan-baru.md',
-    ask: async () => true,
+    ask: async (msg) => { asks.push(msg); return nextAskResult; },
     message: async () => {}
   },
   event: { listen: async () => () => {} },
-  window: { getCurrentWindow: () => ({ setTitle: async (t) => { titles.push(t); } }) }
+  window: {
+    getCurrentWindow: () => ({
+      setTitle: async (t) => { titles.push(t); },
+      onCloseRequested: async (fn) => { closeHandlers.push(fn); return () => {}; },
+      destroy: async () => { destroyed.push(true); }
+    })
+  }
 };
 
 await import('../ui/app.js');
@@ -200,4 +212,121 @@ test('dokumen baru mengosongkan path, isi, dan penanda kotor', async () => {
   assert.equal(api.getMarkdown().trim(), '');
   assert.equal(api.isDirty(), false);
   assert.equal(window.document.getElementById('sb-file').textContent, 'Tanpa Judul');
+});
+
+
+/* ------------------------------------------------------------------------- *
+ * Draft recovery & konfirmasi tutup
+ * ------------------------------------------------------------------------- */
+
+test('handler close native terdaftar saat boot', () => {
+  assert.equal(api.isCloseHandlerRegistered(), true);
+  assert.ok(closeHandlers.length >= 1);
+});
+
+test('tutup saat dokumen bersih tidak memunculkan dialog', async () => {
+  nextAskResult = true;
+  await api.newDocument();                 // dokumen kosong & bersih
+  const before = asks.length;
+  const fakeEvent = { preventDefault: () => { throw new Error('tidak boleh dicegah'); } };
+  await closeHandlers[closeHandlers.length - 1](fakeEvent);
+  assert.equal(asks.length, before, 'tidak boleh bertanya saat tidak ada perubahan');
+});
+
+test('tutup saat kotor + pilih simpan -> write_document dipanggil, close diteruskan', async () => {
+  await api.newDocument();
+  api.quill.insertText(0, 'A', 'user');
+  assert.equal(api.isDirty(), true);
+
+  nextAskResult = true;
+  let prevented = false;
+  const before = asks.length;
+  const writesBefore = tauriCalls.filter((c) => c[0] === 'write_document').length;
+  await closeHandlers[closeHandlers.length - 1]({ preventDefault: () => { prevented = true; } });
+
+  assert.ok(asks.length > before, 'harus menanyakan konfirmasi');
+  assert.match(asks[asks.length - 1], /Simpan sebelum keluar/);
+  assert.equal(tauriCalls.filter((c) => c[0] === 'write_document').length, writesBefore + 1);
+  assert.equal(prevented, false, 'close boleh dilanjutkan setelah simpan berhasil');
+  assert.equal(api.isDirty(), false);
+});
+
+test('tutup saat kotor + pilih tidak menyimpan -> draf tetap ada untuk dipulihkan', async () => {
+  await api.newDocument();
+  api.quill.insertText(0, 'Teks penting', 'user');
+  const expected = api.getMarkdown();
+
+  nextAskResult = false;
+  let prevented = false;
+  const writesBefore = tauriCalls.filter((c) => c[0] === 'write_document').length;
+  await closeHandlers[closeHandlers.length - 1]({ preventDefault: () => { prevented = true; } });
+
+  assert.equal(tauriCalls.filter((c) => c[0] === 'write_document').length, writesBefore,
+    'tidak boleh menulis berkas bila pengguna memilih keluar tanpa menyimpan');
+  assert.equal(prevented, false);
+  const raw = window.localStorage.getItem(api.draftKey);
+  assert.ok(raw, 'draf harus sudah ditulis sebelum dialog');
+  assert.equal(JSON.parse(raw).markdown, expected);
+});
+
+test('gagal menyimpan saat mau keluar -> close dicegah, data tidak hilang', async () => {
+  await api.newDocument();
+  api.quill.insertText(0, 'Jangan hilang', 'user');
+
+  failWrite = true;
+  nextAskResult = true;
+  let prevented = false;
+  try {
+    await closeHandlers[closeHandlers.length - 1]({ preventDefault: () => { prevented = true; } });
+  } finally {
+    failWrite = false;
+  }
+  assert.equal(prevented, true, 'jendela harus tetap terbuka bila simpan gagal');
+  assert.equal(api.isDirty(), true);
+  assert.ok(JSON.parse(window.localStorage.getItem(api.draftKey)).markdown.includes('Jangan hilang'));
+});
+
+test('draf dari sesi sebelumnya ditawarkan dan dipulihkan', async () => {
+  await api.newDocument();
+  const savedAt = Date.now() - 60000;
+  window.localStorage.setItem(api.draftKey, JSON.stringify({
+    version: 1, markdown: '# Pulihkan saya\n\nIsi draf.\n',
+    path: '/home/u/draf.md', savedAt
+  }));
+
+  nextAskResult = true;
+  const before = asks.length;
+  const ok = await api.restoreDraftIfAny();
+
+  assert.equal(ok, true);
+  assert.ok(asks.length > before);
+  assert.match(asks[asks.length - 1], /Ditemukan draf/);
+  assert.ok(api.getMarkdown().includes('Pulihkan saya'));
+  assert.equal(api.getPath(), '/home/u/draf.md');
+  assert.equal(api.isDirty(), true, 'hasil pemulihan masih harus dianggap belum tersimpan');
+});
+
+test('menolak pemulihan draf akan membuang draf tersebut', async () => {
+  await api.newDocument();
+  window.localStorage.setItem(api.draftKey, JSON.stringify({
+    version: 1, markdown: '# Draf lama\n', path: null, savedAt: Date.now()
+  }));
+
+  nextAskResult = false;
+  const ok = await api.restoreDraftIfAny();
+
+  assert.equal(ok, false);
+  assert.equal(window.localStorage.getItem(api.draftKey), null);
+  assert.ok(!api.getMarkdown().includes('Draf lama'));
+});
+
+test('simpan berhasil menghapus draf yang tersisa', async () => {
+  await api.newDocument();
+  api.quill.insertText(0, 'Akan disimpan', 'user');
+  api.flushDraft();
+  assert.ok(window.localStorage.getItem(api.draftKey), 'draf harus ada sebelum simpan');
+
+  assert.equal(await api.saveDocument(false), true);
+  assert.equal(window.localStorage.getItem(api.draftKey), null,
+    'draf harus dihapus setelah berkas tersimpan');
 });

@@ -118,12 +118,31 @@ export function downloadBrowserFile(filename, contents) {
 
 export async function confirmDiscard(tauri) {
   const message = 'Perubahan belum disimpan. Lanjutkan dan buang perubahan itu?';
+  return askOrConfirm(tauri, message, 'MarkRust', 'warning');
+}
+
+/** Ditanyakan saat pengguna menutup jendela dengan dokumen masih kotor. */
+export async function confirmSaveOnClose(tauri) {
+  const message = 'Ada perubahan yang belum disimpan. Simpan sebelum keluar?\n\n' +
+    'Jika memilih tidak menyimpan, draf tetap disimpan otomatis dan bisa ' +
+    'dipulihkan saat aplikasi dibuka lagi.';
+  return askOrConfirm(tauri, message, 'MarkRust', 'warning');
+}
+
+/** Ditanyakan saat startup bila draf dari sesi sebelumnya ditemukan. */
+export async function confirmRestore(tauri, message) {
+  return askOrConfirm(tauri, message, 'MarkRust — Pulihkan draf', 'info');
+}
+
+function askOrConfirm(tauri, message, title, kind) {
   if (tauri && tauri.dialog && typeof tauri.dialog.ask === 'function') {
-    return await tauri.dialog.ask(message, { title: 'MarkRust', kind: 'warning' });
+    return tauri.dialog.ask(message, { title: title, kind: kind });
   }
-  return typeof window !== 'undefined' && typeof window.confirm === 'function'
-    ? window.confirm(message)
-    : false;
+  return Promise.resolve(
+    typeof window !== 'undefined' && typeof window.confirm === 'function'
+      ? window.confirm(message)
+      : false
+  );
 }
 
 export async function showError(tauri, message) {
