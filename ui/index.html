@@ -75,7 +75,10 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 4px;
+    /* Jarak seragam untuk semua anak. Sebelumnya gap 4px masih ditambah
+       margin pada .brand (8px) dan .sep (6px), sehingga jarak antar elemen
+       menjadi tidak rata: 12px, 10px, 4px, 4px. Sekarang cukup satu nilai. */
+    gap: 10px;
     padding: 6px 12px;
     background: var(--bg-base);
     border-bottom: 1px solid var(--border);
@@ -103,7 +106,6 @@
     font-weight: 700;
     font-size: 14px;
     color: var(--accent);
-    margin-right: 8px;
   }
 
   .sep {
@@ -111,7 +113,14 @@
     width: 1px;
     height: 22px;
     background: var(--border);
-    margin: 0 6px;
+  }
+
+  /* Di jendela sempit, nama aplikasi dan pemisahnya dilepas lebih dulu.
+     Keduanya murni hiasan (~105px), sedangkan kontrol format tidak bisa
+     mengecil — kalau yang dikorbankan justru tombol format, mereka akan
+     membungkus menjadi tumpukan dua-tiga baris sebelum waktunya. */
+  @media (max-width: 960px) {
+    .brand, .sep { display: none; }
   }
 
   /* Wadah toolbar Quill: boleh mengecil, isinya yang membungkus.
@@ -144,9 +153,12 @@
     gap: 2px;
     position: relative;
   }
+  /* Garis pemisah digambar di tepi kiri kelompok (left:0), jadi jarak ke
+     kiri dan ke kanan garis harus sama — 5px — supaya pemisahnya tampak
+     berada di tengah celah, bukan menempel ke kelompok sebelumnya. */
   .ql-toolbar.ql-snow .ql-formats + .ql-formats {
-    padding-left: 7px;
-    margin-left: 3px;
+    padding-left: 5px;
+    margin-left: 5px;
   }
   .ql-toolbar.ql-snow .ql-formats + .ql-formats::before {
     content: '';
@@ -223,6 +235,18 @@
     align-items: center;
     transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
   }
+
+  /* Picker warna berisi ikon, bukan teks — jadi diperlakukan seperti tombol:
+     32x32 persegi dan tanpa padding tambahan.
+     Bawaan Quill untuk .ql-color-picker adalah width:28px. Dengan padding
+     0 6px yang diperlukan picker teks (Heading), ruang isinya tinggal
+     28 - 2 border - 12 padding = 14px, lalu dipotong lagi padding 4px kiri
+     kanan milik .ql-picker-label menjadi 6px untuk ikon 18px. Hasilnya ikon
+     ember cat nyaris tak terlihat. */
+  .ql-toolbar.ql-snow .ql-picker.ql-color-picker {
+    width: 32px;
+    padding: 0 !important;
+  }
   .ql-toolbar.ql-snow .ql-picker:hover {
     color: var(--text) !important;
     background: var(--bg-surface) !important;
@@ -268,7 +292,6 @@
 
   .toolbar-right {
     flex: none;
-    margin-left: auto;
     display: flex;
     gap: 4px;
     align-items: center;
@@ -276,7 +299,9 @@
 
   .mode-btn {
     padding: 4px 12px;
-    height: 30px;
+    /* 32px, sama dengan tombol format Quill. Sebelumnya 30px, jadi tombol
+       mode tampil 2px lebih pendek dari tetangganya sebaris. */
+    height: 32px;
     /* --border-hi (3.4:1): batas kontrol interaktif harus terbaca,
        sedangkan --border dipakai untuk pemisah struktural yang halus. */
     border: 1px solid var(--border-hi);
@@ -307,8 +332,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     padding: 0;
     margin-left: 4px;
   }
