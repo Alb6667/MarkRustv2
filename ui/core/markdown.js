@@ -268,9 +268,9 @@ export function isValidImageUrl(url) {
 export function remoteImageCount(md) {
   const src = String(md == null ? '' : md);
   let count = 0;
-  const fromMarkdown = /!\[[^\]]*\]\(\s*<?(https?:\/\/[^\s)>]+)/gi;
+  const fromMarkdown = /!\[[^\]]*\]\(\s*<?((?:https?:)?\/\/[^\s)>]+)/gi;
   while (fromMarkdown.exec(src)) count++;
-  const fromHtml = /<img\b[^>]*\bsrc\s*=\s*["']?(https?:\/\/[^"'\s>]+)/gi;
+  const fromHtml = /<img\b[^>]*\bsrc\s*=\s*["']?((?:https?:)?\/\/[^"'\s>]+)/gi;
   while (fromHtml.exec(src)) count++;
   return count;
 }

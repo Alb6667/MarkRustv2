@@ -58,7 +58,7 @@ function networkTriggeringAttributesIn(root) {
       const at = el.attributes[a];
       const name = at.name.toLowerCase();
       const value = at.value || '';
-      if (FETCH_ATTRS.indexOf(name) !== -1 && /^https?:\/\//i.test(value)) {
+      if (FETCH_ATTRS.indexOf(name) !== -1 && /^(?:https?:)?\/\//i.test(value)) {
         hits.push(el.tagName + '@' + name);
       } else if (name === 'style' && /url\s*\(\s*['"]?https?:\/\//i.test(value)) {
         hits.push(el.tagName + '@style');
@@ -73,6 +73,10 @@ function networkTriggeringAttributesIn(root) {
 test('isRemoteImageUrl hanya mengenali http/https', () => {
   assert.equal(isRemoteImageUrl(REMOTE), true);
   assert.equal(isRemoteImageUrl('http://x.test/a.png'), true);
+  assert.equal(isRemoteImageUrl('//tracker.example/x.png'), true,
+    'protocol-relative juga memicu request dan harus dikenali');
+  assert.equal(isRemoteImageUrl('  \nhttps://tracker.example/x.png'), true,
+    'karakter kontrol di depan tidak boleh menyamarkan URL');
   assert.equal(isRemoteImageUrl('data:image/png;base64,AAA'), false);
   assert.equal(isRemoteImageUrl('/lokal/gambar.png'), false);
   assert.equal(isRemoteImageUrl(''), false);
@@ -101,6 +105,17 @@ test('allowAll lalu reset mengembalikan ke kondisi aman', () => {
   resetImagePolicy();
   assert.equal(isRemoteImageAllowed(REMOTE), false);
   assert.equal(shouldBlockRemoteImage(REMOTE), true);
+});
+
+test('protocol-relative //host/path juga ditahan', () => {
+  resetImagePolicy();
+  const html = mdToQuillHtml('![foto](//tracker.example/pixel.png)\n', parseMarkdown, DOMParser);
+  const doc = new DOMParser().parseFromString('<div id="r">' + html + '</div>', 'text/html');
+  const root = doc.getElementById('r');
+  const img = root.querySelector('img');
+  assert.equal(img.getAttribute('src'), IMAGE_PLACEHOLDER);
+  assert.equal(img.getAttribute('data-mr-src'), '//tracker.example/pixel.png');
+  assert.deepEqual(networkTriggeringAttributesIn(root), []);
 });
 
 test('normalisasi: TIDAK ada atribut bernilai http(s) saat diblokir', () => {

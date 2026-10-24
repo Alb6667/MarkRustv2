@@ -109,4 +109,6 @@ test('remoteImageCount mendeteksi gambar Markdown dan tag <img>', () => {
   assert.equal(remoteImageCount('![a](https://x.test/a.png) dan ![b](http://y.test/b.png)'), 2);
   assert.equal(remoteImageCount('<img src="https://x.test/a.png">'), 1);
   assert.equal(remoteImageCount('![lokal](gambar.png)'), 0);
+  assert.equal(remoteImageCount('![relatif](//tracker.example/x.png)'), 1);
+  assert.equal(remoteImageCount('<img src="//tracker.example/x.png">'), 1);
 });

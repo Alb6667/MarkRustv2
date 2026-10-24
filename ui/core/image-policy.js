@@ -36,7 +36,14 @@ export const IMAGE_PLACEHOLDER =
   );
 
 export function isRemoteImageUrl(url) {
-  return /^https?:\/\//i.test(String(url == null ? '' : url).trim());
+  // `//host/path` (protocol-relative) juga memicu request: browser mengisi
+  // skemanya dari halaman. Tanpa ini, pelaku cukup menulis //tracker.example/x
+  // untuk melewati pemblokiran. Karakter kontrol disingkirkan dulu agar
+  // variasi seperti "\nhttps://..." tidak lolos.
+  var cleaned = String(url == null ? '' : url)
+    .replace(/[\u0000-\u0020\u007f]/g, '')
+    .trim();
+  return /^(?:https?:)?\/\//i.test(cleaned);
 }
 
 export function isPlaceholderUrl(url) {
