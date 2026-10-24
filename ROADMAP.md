@@ -157,7 +157,9 @@ known issues, dan catatan rilis tersedia. Beta tidak otomatis berarti stabil.
 Guard revisi ditambahkan pada Baru/Buka/drop setelah operasi async; restore
 menolak dokumen kotor. Race drop saat pembacaan dan konfirmasi tertunda kini
 memiliki tes regresi. Audit gambar juga memastikan blot tidak menulis URL remote
-ke `src` walau sesaat sebelum placeholder. Setelah perbaikan itu, 147 tes JS
-lulus secara lokal. Hasil, batas terbuka dan langkah lanjut ada di
-STATUS-HANDOFF.md; matriks uji native ada di DESKTOP-TEST-CHECKLIST.md. M1/M2
-tetap belum dinyatakan tuntas tanpa bukti runtime desktop.
+ke `src` walau sesaat sebelum placeholder. Recovery yang dipilih “Nanti saja”
+kini dipisahkan dari sesi edit baru agar tidak ikut ditulis atau dibersihkan.
+Setelah perbaikan itu, 148 tes JS lulus secara lokal. Hasil, batas terbuka dan
+langkah lanjut ada di STATUS-HANDOFF.md; matriks uji native ada di
+DESKTOP-TEST-CHECKLIST.md. M1/M2 tetap belum dinyatakan tuntas tanpa bukti
+runtime desktop.

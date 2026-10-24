@@ -668,7 +668,12 @@ function boot() {
         const rows = await diskRecovery.list();
         if (rows.length > 1) {
           const id = await pickRecovery(document, rows);
-          if (!id || generation !== documentGeneration || revision !== editRevision) return false;
+          if (!id || generation !== documentGeneration || revision !== editRevision) {
+            // The adopted session may belong to an archived document. Move to
+            // an empty session before any later edit/discard can write or clear.
+            await diskRecovery.fresh();
+            return false;
+          }
           await diskRecovery.select(id);
         }
       }

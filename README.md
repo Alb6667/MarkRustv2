@@ -293,7 +293,8 @@ belum tercadangkan tetap berisiko hilang. Storage webview bukan backup permanen.
 Desktop kini menggunakan `<app_data_dir>/recovery-v1/`, bukan localStorage,
 sebagai cadangan utama. Lokasi ditentukan Tauri untuk OS pengguna; frontend
 **tidak dapat memilih path recovery**. Perintah terbatas: `write_recovery`,
-`read_recovery`, `clear_recovery`. Dokumen Tanpa Judul juga dicadangkan.
+`read_recovery`, `clear_recovery`, `list_recoveries`, `select_recovery`, dan
+`fresh_recovery`. Dokumen Tanpa Judul juga dicadangkan.
 
 - Maksimum payload JSON 12 MB; maksimum **5 versi** terakhir untuk editor
   satu-dokumen ini. Ini bukan daftar cadangan per berkas atau recent files.
@@ -358,9 +359,11 @@ filesystem/process, bukan dialog atau lifecycle webview desktop.
 
 Jika beberapa recovery tersedia, dialog startup menampilkan path/nama dokumen
 serta waktu snapshot. Pilih satu untuk melanjutkan konfirmasi pemulihan;
-**Nanti saja** menutup pemilih tanpa menghapus snapshot. Sesi lain yang tidak
-dipilih tetap disimpan. Pemilih belum menyediakan hapus massal atau pemilihan
-versi snapshot manual.
+**Nanti saja** menutup pemilih tanpa menghapus snapshot, lalu mengganti sesi
+adopsi dengan sesi kosong baru. Edit atau pembersihan berikutnya tidak menyentuh
+arsip yang ditunda; jika pembuatan sesi baru gagal, proses tidak mengadopsi arsip
+lagi untuk operasi berikutnya. Sesi lain yang tidak dipilih tetap disimpan.
+Pemilih belum menyediakan hapus massal atau pemilihan versi snapshot manual.
 
 Daftar hanya menyertakan sesi milik instance ini atau sesi yang lock-nya dapat
 diambil. Lock diperiksa ulang saat memilih, karena instance lain mungkin sudah

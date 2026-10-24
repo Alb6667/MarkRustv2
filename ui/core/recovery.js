@@ -30,6 +30,7 @@ export function createDiskRecovery(tauri) {
       });
     },
     select(id) { return enqueue(() => tauri.core.invoke('select_recovery', { id })); },
+    fresh() { return enqueue(() => tauri.core.invoke('fresh_recovery')); },
     clear() { return enqueue(() => tauri.core.invoke('clear_recovery')); }
   };
 }

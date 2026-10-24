@@ -34,6 +34,7 @@ let pendingWrite = null;
 let pendingRead = null;
 let pendingAsk = null;
 let recoveryContents = null;
+let recoveryRows = [];
 let failRecovery = false;
 const DISK_DOC = '# Dokumen Dari Disk\n\nIsi dari berkas.\n';
 window.__TAURI__ = {
@@ -49,6 +50,8 @@ window.__TAURI__ = {
       }
       if (cmd === 'read_recovery') return recoveryContents;
       if (cmd === 'clear_recovery') { recoveryContents = null; return; }
+      if (cmd === 'list_recoveries') return JSON.stringify(recoveryRows);
+      if (cmd === 'fresh_recovery') return null;
       if (cmd === 'read_document' && pendingRead) await pendingRead;
       if (cmd === 'write_document' && pendingWrite) await pendingWrite;
       if (cmd === 'write_document' && failWrite) throw new Error('disk penuh');
@@ -600,5 +603,44 @@ test('drop dengan konfirmasi tertunda tidak membuang edit selama dialog', async 
     release();
     pendingAsk = null;
     deferred.restore();
+  }
+});
+
+
+test('Nanti saja memakai sesi baru sebelum arsip recovery bisa dibersihkan', async () => {
+  nextAskResult = true;
+  await api.newDocument();
+  recoveryRows = [
+    { id: 'session-lama', path: '/home/u/lama.md', savedAt: 1 },
+    { id: 'session-lain', path: '/home/u/lain.md', savedAt: 2 }
+  ];
+  const dialog = window.document.getElementById('recovery-dialog');
+  const originalShowModal = dialog.showModal;
+  const originalClose = dialog.close;
+  dialog.showModal = function () { this.open = true; };
+  dialog.close = function () {
+    this.open = false;
+    this.dispatchEvent(new window.Event('close'));
+  };
+  const before = tauriCalls.length;
+  try {
+    const restoring = api.restoreDraftIfAny();
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(dialog.open, true, 'pemilih recovery harus terbuka');
+    dialog.close(); // tombol Nanti saja / Escape
+    assert.equal(await restoring, false);
+
+    await api.newDocument();
+    await new Promise((r) => setTimeout(r, 0));
+    const commands = tauriCalls.slice(before).map(([cmd]) => cmd);
+    assert.equal(commands.filter((cmd) => cmd === 'fresh_recovery').length, 1,
+      'pembatalan harus mengganti sesi adopsi dengan sesi kosong baru');
+    assert.ok(commands.indexOf('fresh_recovery') < commands.indexOf('clear_recovery'),
+      'clear tidak boleh terjadi sebelum sesi baru aktif');
+    assert.ok(!commands.includes('select_recovery'));
+  } finally {
+    recoveryRows = [];
+    dialog.showModal = originalShowModal;
+    dialog.close = originalClose;
   }
 });

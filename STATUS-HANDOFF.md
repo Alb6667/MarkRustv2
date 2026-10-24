@@ -8,10 +8,10 @@ Dokumen ini adalah titik masuk untuk melanjutkan pekerjaan; baca bersama
 
 Editor dan recovery native sudah diimplementasikan. M1a–M1c memiliki tes otomatis
 serta build/test CI lintas OS yang hijau pada commit `0ecfd7a`. Audit lifecycle
-lanjutan menambah pengaman operasi async. Lanjutan sesi ini menambahkan dua tes
-race drop dan satu tes penulisan `src` gambar sesaat, sehingga menjadi **147 tes
-lulus secara lokal**. CI audit `40074055940` pada commit `b931d22` juga lulus:
-Node serta build/test Rust Linux, Windows, macOS.
+lanjutan menambah pengaman operasi async, tes race drop, pencegahan penulisan
+`src` gambar sesaat, dan pemisahan recovery yang ditunda dari sesi edit baru.
+Verifikasi lokal terbaru mencakup **148 tes JS**. CI audit `40074055940` pada
+commit `b931d22` juga lulus: Node serta build/test Rust Linux, Windows, macOS.
 
 **Belum siap dinyatakan rilis publik. M1 belum ditutup secara keseluruhan, M2
 belum dijalankan di webview desktop nyata.** Jangan menyamakan build CI dengan
@@ -41,6 +41,8 @@ Diperbaiki:
 - Konfirmasi Baru yang tertunda tidak boleh membuang suntingan setelah dialog dimulai.
 - Drop memeriksa generasi/revisi sebelum dan sesudah konfirmasi.
 - Pemulihan tidak boleh berjalan di atas dokumen kotor.
+- “Nanti saja” mengganti sesi adopsi dengan sesi kosong baru sebelum edit/clear
+  berikutnya; kegagalan pergantian tidak boleh mengadopsi arsip kembali.
 
 Tes secara langsung meliputi open tertunda, konfirmasi Baru tertunda, restore
 pada dokumen kotor, serta drop saat pembacaan dan konfirmasi tertunda. Kasus
@@ -48,7 +50,7 @@ native F07 tetap perlu dijalankan; tes jsdom bukan pengganti uji webview.
 
 ## Verifikasi yang tersedia
 
-- Lokal: `npm test` → **147 tests, 147 pass, 0 fail**.
+- Lokal: `npm test` → **148 tests, 148 pass, 0 fail**.
 - Tidak ada toolchain Rust lokal; Rust diverifikasi lewat GitHub Actions.
 - CI M1c `40073225635`, commit `0ecfd7a`: Node + build/test Rust Linux,
   Windows, macOS lulus. Bundel rilis tidak berjalan pada push biasa.
@@ -72,9 +74,6 @@ runtime native dalam sesi sandbox ini. Jangan menandai M1/M2 selesai dulu.
   memilih versi snapshot manual atau hapus massal stale sessions.
 - Semua snapshot rusak tidak ditampilkan di picker; file tetap dipertahankan,
   tetapi pengguna belum mendapat workflow inspeksi/perbaikan khusus.
-- Memilih Nanti saja mempertahankan snapshot saat itu; jika kemudian pengguna
-  mengedit/mengganti dokumen, sesi aktif masih mengikuti kebijakan lifecycle
-  yang ada. Belum ada pemisahan eksplisit "arsip ditunda" vs sesi edit baru.
 - Snapshot global budget dihitung saat tulis; data lama yang sudah di atas
   batas tidak dipangkas paksa. Empty session dirs/temp sisa crash belum punya
   cleanup UI. Simpan berkas asli untuk mengamankan pekerjaan saat quota gagal.

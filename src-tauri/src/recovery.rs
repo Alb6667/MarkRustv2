@@ -1,5 +1,6 @@
 //! Recovery snapshots live only in the app data directory, never at a webview path.
 use std::{fs, io::Write, path::{Path, PathBuf}, sync::Mutex, time::{SystemTime, UNIX_EPOCH}};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Manager;
 use fs2::FileExt;
 use std::fs::File;
@@ -8,6 +9,9 @@ use std::fs::File;
 // be adopted only after the OS grants their lock; never infer liveness from PID.
 struct Session { dir: PathBuf, _lock: File }
 static SESSION: Mutex<Option<Session>> = Mutex::new(None);
+// After postponing a recovery, never auto-adopt an archive again in this
+// process, including when creating its replacement session failed.
+static FRESH_ONLY: AtomicBool = AtomicBool::new(false);
 const LIMIT: usize = 12 * 1024 * 1024;
 const KEEP: usize = 5;
 const TOTAL_LIMIT: u64 = 256 * 1024 * 1024;
@@ -20,6 +24,18 @@ fn lock_session(dir: &Path) -> Result<Option<Session>, String> {
         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock
             || e.raw_os_error() == fs2::lock_contended_error().raw_os_error() => Ok(None),
         Err(e) => Err(e.to_string()),
+    }
+}
+fn create_session(root: &Path) -> Result<Session, String> {
+    fs::create_dir_all(root).map_err(|e| e.to_string())?;
+    loop {
+        let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?.as_nanos();
+        let dir = root.join(format!("session-{stamp:039}-{}", std::process::id()));
+        match fs::create_dir(&dir) {
+            Ok(()) => return lock_session(&dir)?.ok_or_else(|| "Session lock unavailable".into()),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e.to_string()),
+        }
     }
 }
 fn acquire(root: &Path) -> Result<Session, String> {
@@ -35,25 +51,27 @@ fn acquire(root: &Path) -> Result<Session, String> {
             if !snapshots(dir)?.is_empty() { return Ok(session); }
         }
     }
-    loop {
-        let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?.as_nanos();
-        let dir = root.join(format!("session-{stamp:039}-{}", std::process::id()));
-        match fs::create_dir(&dir) {
-            Ok(()) => return lock_session(&dir)?.ok_or_else(|| "Session lock unavailable".into()),
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(e) => return Err(e.to_string()),
-        }
-    }
+    create_session(root)
+}
+fn replace_with_fresh(base: &Path, state: &mut Option<Session>) -> Result<(), String> {
+    // Construct first so this helper never destroys the caller's current state
+    // on failure. The command may deliberately pass None; see fresh_recovery.
+    let fresh = create_session(&base.join("recovery-v2"))?;
+    *state = Some(fresh);
+    Ok(())
 }
 fn with_session<T>(app: &tauri::AppHandle, task: impl FnOnce(&Path) -> Result<T, String>) -> Result<T, String> {
     let mut state = SESSION.lock().map_err(|e| e.to_string())?;
     if state.is_none() {
         let base = app.path().app_data_dir().map_err(|e| e.to_string())?;
-        let mut session = acquire(&base.join("recovery-v2"))?;
+        let fresh_only = FRESH_ONLY.load(Ordering::SeqCst);
+        let root = base.join("recovery-v2");
+        let mut session = if fresh_only { create_session(&root)? } else { acquire(&root)? };
         // Adopt old-format recovery in place, under the same OS lock. Never
         // copy it into several sessions or delete an unclaimed legacy draft.
+        // After a postponement, legacy storage is likewise read-only archive.
         let legacy = base.join("recovery-v1");
-        if snapshots(&session.dir)?.is_empty() && legacy.is_dir() {
+        if !fresh_only && snapshots(&session.dir)?.is_empty() && legacy.is_dir() {
             if let Some(old) = lock_session(&legacy)? {
                 if !snapshots(&legacy)?.is_empty() { session = old; }
             }
@@ -164,6 +182,18 @@ pub fn clear_recovery(app: tauri::AppHandle) -> Result<(), String> {
         for path in snapshots(dir)? { fs::remove_file(path).map_err(|e| e.to_string())?; }
         Ok(())
     })
+}
+#[tauri::command]
+pub fn fresh_recovery(app: tauri::AppHandle) -> Result<(), String> {
+    // Used when an adopted recovery is postponed. Subsequent edits/clears must
+    // belong to a fresh session, never to the archived document.
+    let mut state = SESSION.lock().map_err(|e| e.to_string())?;
+    let base = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    FRESH_ONLY.store(true, Ordering::SeqCst);
+    // Even if creation fails, a later clear/write must retry a fresh session
+    // via with_session instead of adopting and destroying the postponed draft.
+    *state = None;
+    replace_with_fresh(&base, &mut state)
 }
 
 // IDs are directory names, never arbitrary filesystem paths from the webview.
@@ -316,6 +346,34 @@ mod tests {
         assert!(read(&recovered.dir).unwrap().unwrap().contains("child draft"));
         drop(recovered); drop(parent);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn fresh_session_preserves_postponed_recovery() {
+        let base = std::env::temp_dir().join(format!("mr-postponed-{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        let root = base.join("recovery-v2");
+        let stale = acquire(&root).unwrap();
+        let stale_dir = stale.dir.clone();
+        write(&stale_dir, r#"{"version":1,"markdown":"keep me"}"#).unwrap();
+
+        let mut state = Some(stale);
+        replace_with_fresh(&base, &mut state).unwrap();
+        let fresh_dir = state.as_ref().unwrap().dir.clone();
+        assert_ne!(fresh_dir, stale_dir);
+        assert!(read(&stale_dir).unwrap().unwrap().contains("keep me"));
+
+        // A discard/clear in the new editing session must not touch the old one.
+        write(&fresh_dir, r#"{"version":1,"markdown":"new edit"}"#).unwrap();
+        for path in snapshots(&fresh_dir).unwrap() { fs::remove_file(path).unwrap(); }
+        assert!(read(&stale_dir).unwrap().unwrap().contains("keep me"));
+
+        // Once the process is gone, the postponed snapshot is still claimable.
+        drop(state);
+        let recovered = acquire(&root).unwrap();
+        assert_eq!(recovered.dir, stale_dir);
+        assert!(read(&recovered.dir).unwrap().unwrap().contains("keep me"));
+        drop(recovered);
+        fs::remove_dir_all(base).unwrap();
     }
 
     #[test]
