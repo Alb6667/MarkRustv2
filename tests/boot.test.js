@@ -75,7 +75,7 @@ test('index.html menyediakan semua elemen yang dipakai status bar & dialog', () 
     'toolbar', 'quill-toolbar', 'btn-wysiwyg', 'btn-markdown', 'btn-pin',
     'statusbar', 'sb-mode', 'sb-dirty', 'sb-notice', 'stat-words', 'stat-chars',
     'image-dialog', 'image-form', 'image-url', 'image-error', 'image-cancel', 'image-ok',
-    'btn-new', 'btn-open', 'btn-save', 'sb-file'
+    'btn-new', 'btn-open', 'btn-save', 'sb-file', 'sb-load-images'
   ]) {
     assert.ok(d.getElementById(id), 'elemen #' + id + ' hilang dari index.html');
   }
@@ -329,4 +329,49 @@ test('simpan berhasil menghapus draf yang tersisa', async () => {
   assert.equal(await api.saveDocument(false), true);
   assert.equal(window.localStorage.getItem(api.draftKey), null,
     'draf harus dihapus setelah berkas tersimpan');
+});
+
+
+/* ------------------------------------------------------------------------- *
+ * Keamanan gambar jarak jauh (integrasi dengan UI)
+ * ------------------------------------------------------------------------- */
+
+test('membuka dokumen asing menahan gambar dan menampilkan tombol Muat gambar', async () => {
+  api.setMarkdown('![foto](https://tracker.example/pixel.png)\n');
+  const imgs = Array.from(api.quill.root.querySelectorAll('img'));
+  assert.equal(imgs.length, 1);
+  assert.ok(!/^https?:/i.test(imgs[0].getAttribute('src') || ''),
+    'src tidak boleh menunjuk ke jaringan sebelum ada izin');
+  assert.equal(imgs[0].getAttribute('data-mr-src'), 'https://tracker.example/pixel.png');
+
+  const btn = window.document.getElementById('sb-load-images');
+  assert.equal(btn.hidden, false);
+  assert.match(btn.textContent, /Muat gambar \(1\)/);
+  assert.match(window.document.getElementById('sb-notice').textContent, /diblokir/);
+});
+
+test('Muat gambar mengembalikan src asli dan menyembunyikan tombol', async () => {
+  const n = await api.loadRemoteImages();
+  assert.equal(n, 1);
+  const img = api.quill.root.querySelector('img');
+  assert.equal(img.getAttribute('src'), 'https://tracker.example/pixel.png');
+  assert.equal(window.document.getElementById('sb-load-images').hidden, true);
+});
+
+test('URL gambar tetap utuh di Markdown walau ditahan', () => {
+  api.setMarkdown('![foto](https://tracker.example/pixel.png)\n');
+  assert.match(api.getMarkdown(), /!\[foto\]\(https:\/\/tracker\.example\/pixel\.png\)/);
+});
+
+test('setMarkdown mereset izin gambar untuk dokumen berikutnya', async () => {
+  api.setMarkdown('![foto](https://tracker.example/pixel.png)\n');
+  await api.loadRemoteImages();
+  assert.equal(api.quill.root.querySelector('img').getAttribute('src'),
+    'https://tracker.example/pixel.png');
+
+  api.setMarkdown('![baru](https://tracker.example/lain.png)\n');
+  const img = api.quill.root.querySelector('img');
+  assert.ok(!/^https?:/i.test(img.getAttribute('src') || ''),
+    'dokumen baru harus kembali diblokir');
+  assert.equal(window.document.getElementById('sb-load-images').hidden, false);
 });

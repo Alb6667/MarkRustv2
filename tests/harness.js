@@ -7,6 +7,11 @@ import { JSDOM } from 'jsdom';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  registerDividerBlot, registerHrMatcher,
+  registerSafeImageBlot, registerImageMatcher
+} from '../ui/core/quill-setup.js';
+import { resetImagePolicy } from '../ui/core/image-policy.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -69,6 +74,12 @@ export function getEnv() {
   if (typeof Quill !== 'function') throw new Error('Quill gagal dimuat di jsdom');
   if (!marked || typeof marked.parse !== 'function') throw new Error('marked gagal dimuat di jsdom');
 
+  // Registrasi yang sama persis dengan app.js (lihat boot() di ui/app.js).
+  // Tanpa ini harness menguji jalur yang berbeda dari produksi — persis
+  // seperti yang terjadi saat tes round-trip gambar gagal.
+  registerDividerBlot(Quill);
+  registerSafeImageBlot(Quill);
+
   env = { dom, window, Quill, marked, DOMParser: window.DOMParser };
   return env;
 }
@@ -80,6 +91,9 @@ export function parseMarkdown(src) {
 }
 
 let counter = 0;
+
+/** Kembalikan kebijakan gambar ke kondisi awal (dipakai antar tes). */
+export function resetPolicy() { resetImagePolicy(); }
 
 /** Instance Quill baru pada container terpisah (aman dipakai paralel). */
 export function createQuill(extraModules = {}) {
@@ -93,5 +107,7 @@ export function createQuill(extraModules = {}) {
     modules: Object.assign({ toolbar: false, syntax: false }, extraModules),
     placeholder: ''
   });
+  registerHrMatcher(quill, Quill);
+  registerImageMatcher(quill, Quill);
   return quill;
 }

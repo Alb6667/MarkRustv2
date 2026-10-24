@@ -6,6 +6,10 @@
  * mengubah perilaku di webview Tauri.
  */
 
+import {
+  shouldBlockRemoteImage, isRemoteImageUrl, IMAGE_PLACEHOLDER
+} from './image-policy.js';
+
 export function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -19,11 +23,84 @@ export function escapeHtml(s) {
  *                    sehingga indentasi kode tidak lipat)
  *   checkbox      -> teks "[ ] " / "[x] " (task list tidak hilang)
  */
+/**
+ * Sanitasi HTML yang berasal dari Markdown (sumber tidak dipercaya).
+ *
+ * Pemblokiran gambar jarak jauh terjadi di blot Quill, tetapi vektor lain bisa
+ * memicu permintaan jaringan tanpa pernah menyentuh atribut `src`:
+ *   - `srcset` pada <img>,
+ *   - `background-image: url(...)` pada style inline,
+ *   - event handler `on*` (dicegah CSP, tapi tetap dibuang),
+ *   - elemen <script>/<iframe>/<object>/<style>/<link>/<base>.
+ *
+ * Deklarasi CSS `url()` dibuang per-deklarasi, BUKAN seluruh atribut style,
+ * supaya warna teks/latar (`color:`/`background-color:`) tetap ikut round-trip.
+ */
+function sanitizeUntrustedHtml(root) {
+  var dangerous = root.querySelectorAll(
+    'script,iframe,object,embed,style,link,meta,base,form,svg,math,' +
+    'audio,video,source,track,picture,frame,frameset,applet,portal,' +
+    'input[type="image"]'
+  );
+  for (var d = 0; d < dangerous.length; d++) {
+    if (dangerous[d].parentNode) dangerous[d].parentNode.removeChild(dangerous[d]);
+  }
+
+  var nodes = root.querySelectorAll('*');
+  for (var i = 0; i < nodes.length; i++) {
+    var el = nodes[i];
+    var attrs = [];
+    for (var a = 0; a < el.attributes.length; a++) attrs.push(el.attributes[a]);
+    for (var j = 0; j < attrs.length; j++) {
+      var name = attrs[j].name.toLowerCase();
+      var value = attrs[j].value || '';
+      if (name.indexOf('on') === 0 || name === 'srcset' || name === 'poster' ||
+          name === 'background' || name === 'data' || name === 'formaction' ||
+          name === 'ping') {
+        el.removeAttribute(attrs[j].name);
+      } else if (name === 'src' && el.tagName !== 'IMG') {
+        // Elemen non-img dengan src (video/audio/source/... ) sudah dihapus di
+        // atas, tetapi ini menutup elemen tak dikenal yang mungkin ditambahkan
+        // parser di masa depan. Hanya <img> yang boleh punya src.
+        el.removeAttribute(attrs[j].name);
+      } else if (name === 'href' && el.tagName !== 'A' && isRemoteImageUrl(value)) {
+        // <svg><image href="..."> dan sejenisnya sudah terhapus di atas,
+        // ini jaga-jaga untuk elemen lain yang memakai href sebagai sumber.
+        el.removeAttribute(attrs[j].name);
+      } else if (name === 'style' && /url\s*\(|expression\s*\(/i.test(value)) {
+        var kept = value.split(';').filter(function (decl) {
+          return !/url\s*\(|expression\s*\(/i.test(decl);
+        }).join(';').trim();
+        if (kept) el.setAttribute('style', kept);
+        else el.removeAttribute('style');
+      }
+    }
+  }
+
+  /* Pemblokiran gambar HARUS terjadi di sini, bukan hanya di blot Quill.
+     Di Chrome, menyetel `img.src` pada elemen yang masih terlepas dari DOM
+     tetap memicu permintaan jaringan. Karena `dangerouslyPasteHTML` membangun
+     pohon perantara seperti itu, URL asli tidak boleh pernah sampai ke sana.
+     URL aslinya dipindah ke `data-mr-src`; matcher clipboard membacanya
+     kembali sehingga Delta (dan berkas .md) tetap berisi alamat asli. */
+  var imgs = root.querySelectorAll('img');
+  for (var k = 0; k < imgs.length; k++) {
+    var img = imgs[k];
+    var src = img.getAttribute('src') || '';
+    if (shouldBlockRemoteImage(src)) {
+      img.setAttribute('data-mr-src', src);
+      img.setAttribute('src', IMAGE_PLACEHOLDER);
+    }
+  }
+}
+
 export function normalizeForQuill(html, DOMParserImpl) {
   var Parser = DOMParserImpl || globalThis.DOMParser;
   if (!Parser) throw new Error('normalizeForQuill membutuhkan DOMParser');
   var doc = new Parser().parseFromString('<div id="__mr_root">' + html + '</div>', 'text/html');
   var root = doc.getElementById('__mr_root');
+
+  sanitizeUntrustedHtml(root);
 
   var i, nodes;
 

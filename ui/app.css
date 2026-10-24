@@ -730,3 +730,29 @@
 
 /* Indikasi sedang ada operasi I/O (dialog/perintah Rust berjalan). */
 #app.io-busy #toolbar { cursor: progress; }
+
+/* Tombol aksi di status bar (mis. "Muat gambar"). Sengaja kecil dan netral:
+   ini tindakan yang menaikkan izin, jadi tidak boleh tampil mencolok. */
+.sb-action {
+  flex: none;
+  padding: 2px 9px;
+  border: 1px solid var(--border-hi);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 10.5px;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease;
+}
+.sb-action:hover { background: var(--bg-overlay); color: var(--text); }
+.sb-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sb-action[hidden] { display: none; }
+
+/* Placeholder gambar yang ditahan: beri isyarat visual bahwa itu bukan
+   gambar asli, tanpa memuat apa pun dari jaringan. */
+.ql-editor img[data-mr-src] {
+  opacity: 0.92;
+  outline: 1px dashed var(--border-hi);
+  outline-offset: 2px;
+}

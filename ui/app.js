@@ -21,9 +21,13 @@ import {
   isValidImageUrl
 } from './core/markdown.js';
 import {
-  registerDividerBlot,
-  registerHrMatcher
+  registerDividerBlot, registerHrMatcher,
+  registerSafeImageBlot, registerImageMatcher, revealAllowedImages
 } from './core/quill-setup.js';
+import {
+  resetImagePolicy, allowRemoteImage, allowAllRemoteImages,
+  isRemoteImageAllowed
+} from './core/image-policy.js';
 import {
   getTauriApi, openWithTauri, saveWithTauri, readBrowserFile,
   downloadBrowserFile, confirmDiscard, confirmSaveOnClose, confirmRestore,
@@ -54,6 +58,8 @@ function boot() {
    * 1. Blot divider — modul bersama dengan harness tes
    * ======================================================= */
   registerDividerBlot(Quill);
+  // Harus sebelum `new Quill()` agar blot pengganti dipakai sejak awal.
+  registerSafeImageBlot(Quill);
 
   /* =========================================================
    * 2. Bahasa yang tersedia untuk syntax highlighting
@@ -137,6 +143,8 @@ function boot() {
     }
     const idx = pendingImageRange ? pendingImageRange.index
       : (quill.getSelection(true) || { index: 0 }).index;
+    // URL dimasukkan sendiri lewat dialog => persetujuan eksplisit.
+    allowRemoteImage(clean);
     quill.insertEmbed(idx, 'image', clean, 'user');
     quill.setSelection(idx + 1, 0, 'user');
     if (typeof imageDialog.close === 'function') imageDialog.close();
@@ -177,6 +185,7 @@ function boot() {
   }
 
   registerHrMatcher(quill, Quill);
+  registerImageMatcher(quill, Quill);
 
   /* =========================================================
    * 4. Konversi (delegasi ke modul murni)
@@ -203,6 +212,7 @@ function boot() {
   const sbDirty = document.getElementById('sb-dirty');
   const sbNotice = document.getElementById('sb-notice');
   const sbFile = document.getElementById('sb-file');
+  const btnLoadImages = document.getElementById('sb-load-images');
   let currentMode = 'wysiwyg';
   let currentPath = null;
   let dirty = false;
@@ -424,6 +434,9 @@ function boot() {
 
   /** Terapkan dokumen ke mode yang sedang aktif. */
   function applyDocument(md) {
+    // Dokumen baru = kepercayaan baru. Izin gambar tidak boleh menular dari
+    // dokumen sebelumnya ke dokumen yang baru dibuka.
+    resetImagePolicy();
     if (currentMode === 'markdown') {
       textarea.value = md;
       updateStats();
@@ -618,12 +631,46 @@ function boot() {
     document.getElementById('stat-words').textContent = 'Words: ' + stats.words;
     document.getElementById('stat-chars').textContent = 'Chars: ' + stats.chars;
 
-    const remote = remoteImageCount(canonical);
-    sbNotice.hidden = remote === 0;
-    sbNotice.textContent = remote
-      ? remote + ' gambar jarak jauh akan dimuat dari jaringan'
-      : '';
+    // Hitung dari DOM, bukan hanya dari teks: yang penting adalah berapa
+    // gambar yang BENAR-BENAR masih tertahan, bukan sekadar jumlah URL.
+    const held = quill.root.querySelectorAll('img[data-mr-src]');
+    const blocked = [];
+    for (let i = 0; i < held.length; i++) {
+      const url = held[i].getAttribute('data-mr-src');
+      if (url && !isRemoteImageAllowed(url)) blocked.push(url);
+    }
+    const total = remoteImageCount(canonical);
+
+    if (blocked.length) {
+      sbNotice.hidden = false;
+      sbNotice.textContent = blocked.length + ' gambar jarak jauh diblokir';
+      btnLoadImages.hidden = false;
+      btnLoadImages.textContent = 'Muat gambar (' + blocked.length + ')';
+      btnLoadImages.dataset.count = String(blocked.length);
+    } else {
+      btnLoadImages.hidden = true;
+      sbNotice.hidden = total === 0;
+      sbNotice.textContent = total
+        ? total + ' gambar jarak jauh diizinkan'
+        : '';
+    }
   }
+
+  async function loadRemoteImages() {
+    const nodes = quill.root.querySelectorAll('img[data-mr-src]');
+    const urls = [];
+    for (let i = 0; i < nodes.length; i++) {
+      const u = nodes[i].getAttribute('data-mr-src');
+      if (u) urls.push(u);
+    }
+    if (!urls.length) return 0;
+    allowAllRemoteImages(urls);
+    const revealed = revealAllowedImages(quill);
+    updateStats();
+    return revealed;
+  }
+
+  btnLoadImages.addEventListener('click', loadRemoteImages);
 
   // Debounce: serializeLines() berjalan tiap ketikan kalau tidak ditunda.
   function scheduleStats() {
@@ -693,7 +740,12 @@ function boot() {
     quillToMarkdown: quillToMarkdown,
     mdToQuillHtml: toHtml,
     getMarkdown: getCanonicalMarkdown,
-    setMarkdown: loadMarkdownIntoQuill,
+    setMarkdown: function (md) {
+      // Jembatan ini dipakai untuk mengganti dokumen, bukan sekadar toggle
+      // mode. Reset kebijakan agar izin gambar tidak menular ke dokumen baru.
+      resetImagePolicy();
+      return loadMarkdownIntoQuill(md);
+    },
     getStats: function () { return documentStats(getCanonicalMarkdown()); },
     isDirty: function () { return dirty; },
     markClean: markClean,
@@ -703,6 +755,7 @@ function boot() {
     saveDocument: saveDocument,
     handleMenuAction: handleMenuAction,
     restoreDraftIfAny: restoreDraftIfAny,
+    loadRemoteImages: loadRemoteImages,
     flushDraft: flushDraft,
     discardDraft: discardDraft,
     draftKey: DRAFT_KEY,

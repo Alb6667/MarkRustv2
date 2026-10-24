@@ -45,6 +45,7 @@ ui/
     quill-setup.js  registrasi blot <hr> & matcher clipboard (dipakai app + tes)
   files.js        I/O dokumen: dialog Tauri + fallback browser
   drafts.js       penyimpanan & pemulihan draf (murni, storage di-inject)
+  image-policy.js allow-list gambar jarak jauh per dokumen
   vendor/           library pihak ketiga (lokal, offline-ready)
 tests/
   harness.js        jsdom + Quill/marked hasil vendoring (bukan mock)
@@ -101,13 +102,43 @@ kehilangan tag pembungkusnya.
   dipasang via `addHandler()`. Bentuk `{ container, handlers }` bergantung pada
   pemeriksaan internal `constructor !== Object` yang rapuh lintas realm.
 
-### Catatan privasi gambar
+### Privasi gambar jarak jauh
 
-CSP masih mengizinkan `img-src https:`. Artinya, membuka dokumen Markdown dari
-pihak lain dapat memicu permintaan jaringan ke URL gambar di dalamnya. Status
-bar kini **menampilkan jumlah gambar jarak jauh** supaya ini tidak terjadi
-diam-diam. Pemblokiran penuh membutuhkan blot gambar kustom yang menyimpan URL
-asli tanpa memuatnya — belum diimplementasikan.
+Membuka dokumen Markdown dari pihak lain **tidak lagi** memicu permintaan
+jaringan. Sebelumnya CSP mengizinkan `img-src https:`, sehingga setiap
+`![gambar](https://…)` langsung menjadi *tracking beacon* yang melapor ke
+server si pengirim berkas.
+
+Pemblokiran dilakukan berlapis, karena satu titik saja tidak cukup:
+
+1. **Normalisasi HTML (utama).** Sebelum HTML diserahkan ke Quill, URL `src`
+   gambar dipindah ke atribut inert `data-mr-src` dan diganti placeholder
+   `data:` lokal. Ini krusial: di Chrome, `img.src` memicu fetch **walau
+   elemennya tidak pernah dipasang ke DOM**, jadi menunggu sampai tahap render
+   sudah terlambat.
+2. **Sanitasi vektor lain.** `srcset`, CSS `url()`, `background`, `poster`,
+   `ping`, `data`, `formaction`, handler `on*`, serta elemen
+   `<iframe>/<object>/<script>/<style>/<svg>/<video>/<audio>/<input type=image>`
+   dibuang. CSS dibuang per-deklarasi supaya warna teks/latar tetap ikut
+   round-trip.
+3. **Blot gambar aman.** Menggantikan blot `image` bawaan Quill sebagai
+   pengaman kedua (misalnya untuk gambar yang disisipkan lewat paste).
+   `value()` membaca `data-mr-src`, sehingga **Delta dan berkas `.md` tetap
+   berisi URL asli** — tidak ada data yang hilang.
+4. **Allow-list per dokumen.** URL dimuat hanya setelah pengguna menekan
+   tombol **"Muat gambar"** di status bar, atau saat ia menyisipkan URL itu
+   sendiri lewat dialog. Izin tidak pernah di-*persist* dan otomatis direset
+   setiap dokumen diganti, sehingga berkas asing berikutnya kembali aman.
+
+**Trade-off yang perlu diketahui:** CSP masih mencantumkan `https:` pada
+`img-src` — itu memang diperlukan agar pemuatan atas izin eksplisit bisa
+berfungsi. Dengan demikian jaminan keamanan berada pada **lapisan aplikasi**
+(sanitasi + blot + tes), bukan pada CSP. Vektor yang diketahui sudah ditutup
+dan dikunci oleh tes, tetapi celah baru di masa depan tidak akan dicegah oleh
+CSP. Hardening lanjutan yang lebih kuat adalah memindahkan pengunduhan gambar
+ke perintah Rust dengan validasi ketat (batas ukuran, blokir alamat privat,
+`Content-Type: image/*`) lalu menyajikannya sebagai `data:`/skema kustom —
+dengan begitu `https:` bisa dihapus total dari CSP.
 
 ## Cara kerja konversi
 
@@ -213,15 +244,16 @@ kasus tersebut konfirmasi tutup menjadi satu-satunya pelindung.
 
 Sudah berfungsi: editing WYSIWYG, toggle Markdown, round-trip format, buka/
 simpan berkas, menu native, pintasan, drag-drop, statistik dokumen, konfirmasi
-tutup, dan pemulihan draf.
+tutup, pemulihan draf, dan pemblokiran gambar jarak jauh dengan izin eksplisit.
 
 Belum / perlu diperhatikan:
 
 - **Autosave ke berkas asli** belum ada (draf baru tersimpan di webview, bukan
   menimpa berkas `.md` yang sedang dibuka), dan belum ada daftar berkas terakhir.
 - **Batas `localStorage`** berlaku untuk draf (lihat bagian di atas).
-- **Gambar jarak jauh** masih dimuat dari jaringan (lihat *Catatan privasi
-  gambar* di atas); pemblokiran penuh butuh blot gambar kustom.
+- **CSP `img-src` masih mengizinkan `https:`** demi fitur pemuatan gambar atas
+  izin eksplisit (lihat *Privasi gambar jarak jauh* di atas). Pemblokiran
+  otomatis sudah aktif, tetapi pertahanannya ada di lapisan aplikasi.
 - **Raw HTML**, soft/hard line break, dan `:---` mengikuti batasan yang sudah
   dijelaskan di bagian konversi.
 - **Lisensi proyek** belum ditentukan. Yang ada saat ini hanya lisensi
