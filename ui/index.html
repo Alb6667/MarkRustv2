@@ -14,26 +14,23 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   :root {
-    /* Palet Catppuccin Mochi yang disusun sebagai tangga elevasi, bukan
-       kumpulan warna lepas: crust < base < surface < overlay.
-       Rasio kontras teks terhadap --bg-base sudah diukur:
-       --text 11.3:1, --text-dim 7.4:1, --text-muted 6.3:1
-       (batas WCAG AA untuk teks kecil adalah 4.5:1). */
-    --bg-deep:    #11111b;  /* crust    — paling luar */
-    --bg-base:    #1e1e2e;  /* base     — editor, toolbar, status bar */
-    --bg-surface: #313244;  /* surface0 — kontrol terangkat, hover */
-    --bg-overlay: #45475a;  /* surface1 — hover yang lebih tinggi */
-    --border:     #313244;  /* surface0 — pemisah struktural */
-    --border-hi:  #6c7086;  /* overlay0 — tepi kontrol interaktif (3.4:1) */
-    --text:       #cdd6f4;
-    --text-dim:   #a6adc8;
-    --text-muted: #98a0bb;
-    --accent:     #89b4fa;
-    --accent-tint: rgba(137, 180, 250, 0.20);
-    --yellow:     #f9e2af;
-    --purple:     #cba6f7;
-    --code-bg:    #181825;  /* mantle   — blok kode, lebih gelap dari base */
-    --code-text:  #d6deeb;
+    /* Tangga abu-abu netral (tanpa semburat biru/ungu). Elevasi dibedakan
+       oleh kecerahan, bukan warna: deep < base < surface < overlay.
+       Aksen biru tunggal dipakai hemat — hanya tautan, fokus, dan kontrol
+       aktif fungsional. Kontras teks terhadap --bg-base berada di atas
+       ambang WCAG AA 4.5:1 untuk teks kecil. */
+    --bg-deep:    #0d0f12;  /* paling luar, kanvas jendela */
+    --bg-base:    #15181c;  /* editor dan toolbar */
+    --bg-surface: #1d2127;  /* kontrol terangkat, hover */
+    --bg-overlay: #282d35;  /* hover tingkat tinggi, panel dropdown */
+    --border:     #262b32;  /* garis struktural (hairline) */
+    --border-hi:  #3a414b;  /* tepi kontrol interaktif */
+    --text:       #e6e9ed;
+    --text-dim:   #a7adb6;
+    --text-muted: #7c848f;
+    --accent:     #5b9dff;  /* satu-satunya warna fungsional */
+    --code-bg:    #101317;  /* blok kode, lebih gelap dari base */
+    --code-text:  #d8dce2;
     --radius:     8px;
     /* Lebar maksimum teks (ukuran baca). 40rem = 640px, cukup untuk ~80 kolom kode. */
     --measure:    40rem;
@@ -52,7 +49,7 @@
   }
 
   ::selection {
-    background: rgba(137, 180, 250, 0.28);
+    background: rgba(91, 157, 255, 0.22);
     color: #fff;
   }
 
@@ -76,15 +73,9 @@
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
-    padding: 8px 14px;
-    /* Lapisan frosted: konten editor yang lewat di bawahnya saat auto-hide
-       terlihat buram, bukan tertutup panel solid. Bila backdrop-filter tidak
-       didukung, warna rgba ini tetap menjadi fallback yang terbaca. */
-    background: rgba(30, 30, 46, 0.82);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: none;
-    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+    padding: 8px 12px;
+    background: var(--bg-base);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
     min-height: 48px;
     -webkit-app-region: drag;
@@ -104,16 +95,22 @@
     pointer-events: none;
   }
 
-  /* Brand hanya simbol ◆ — kompak, tidak perlu disembunyikan di jendela
-     sempit lagi. Aksen dipakai pelan: tidak ada teks yang bersaing dengannya. */
+  /* Brand hanya simbol ◆, netral — aksen dicadangkan untuk kontrol fungsional. */
   .brand {
     flex: none;
     display: inline-flex;
     align-items: center;
-    font-size: 15px;
+    font-size: 14px;
     line-height: 1;
-    color: var(--accent);
-    opacity: 0.9;
+    color: var(--text-muted);
+  }
+
+  /* Pemisah hairline antar wilayah toolbar (brand | kontrol | mode). */
+  .tb-divider {
+    flex: none;
+    width: 1px;
+    height: 20px;
+    background: var(--border);
   }
 
   /* Wadah toolbar Quill: boleh mengecil, isinya yang membungkus.
@@ -135,16 +132,28 @@
   }
 
   /* Kelompok kontrol (Heading | B I U S | warna | list | ...).
-     Minimalis: batas kelompok dibedakan dengan jarak, bukan garis 1px. */
+     Batas kelompok: hairline netral + jarak seragam 10px antar grup,
+     2px antar tombol di dalam grup. */
   .ql-toolbar.ql-snow .ql-formats {
     flex: none;
     margin-right: 0 !important;
     display: flex;
     align-items: center;
     gap: 2px;
+    position: relative;
   }
   .ql-toolbar.ql-snow .ql-formats + .ql-formats {
-    margin-left: 6px;
+    margin-left: 10px;
+  }
+  .ql-toolbar.ql-snow .ql-formats + .ql-formats::before {
+    content: '';
+    position: absolute;
+    left: -5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1px;
+    height: 16px;
+    background: var(--border);
   }
 
   /* Tombol format ghost: transparan saat diam, permukaan hanya muncul saat
@@ -169,13 +178,13 @@
     outline-offset: -2px;
   }
 
-  /* Keadaan aktif: tint aksen lembut tanpa ring tambahan — beberapa toggle
-     bisa menyala bersamaan (mis. Bold + Italic), jadi bobotnya harus ringan. */
+  /* Keadaan aktif: permukaan abu terangkat, ikon putih — tanpa warna aksen.
+     Beberapa toggle bisa menyala bersamaan (mis. Bold + Italic). */
   .ql-toolbar.ql-snow button.ql-active {
-    background: var(--accent-tint) !important;
+    background: rgba(255, 255, 255, 0.10) !important;
   }
   .ql-toolbar.ql-snow button.ql-active:hover {
-    background: rgba(137, 180, 250, 0.28) !important;
+    background: rgba(255, 255, 255, 0.13) !important;
   }
 
   .ql-toolbar.ql-snow button .ql-stroke {
@@ -185,7 +194,7 @@
     stroke: var(--text) !important;
   }
   .ql-toolbar.ql-snow button.ql-active .ql-stroke {
-    stroke: var(--accent) !important;
+    stroke: var(--text) !important;
   }
 
   .ql-toolbar.ql-snow button .ql-fill {
@@ -195,7 +204,7 @@
     fill: var(--text) !important;
   }
   .ql-toolbar.ql-snow button.ql-active .ql-fill {
-    fill: var(--accent) !important;
+    fill: var(--text) !important;
   }
 
   /* Picker (Heading, warna teks, warna latar) — bahasa ghost yang sama
@@ -247,12 +256,19 @@
   }
   .ql-toolbar.ql-snow .ql-picker.ql-expanded .ql-picker-options .ql-picker-item:hover {
     background: var(--bg-overlay) !important;
-    color: var(--accent) !important;
+    color: var(--text) !important;
   }
   .ql-toolbar.ql-snow .ql-picker-label .ql-stroke {
     stroke: var(--text-dim) !important;
   }
   .ql-toolbar.ql-snow .ql-picker:hover .ql-picker-label .ql-stroke {
+    stroke: var(--text) !important;
+  }
+  /* Label aktif (mis. "Heading 2"): cukup cerah, jangan biru. Tema snow
+     bawaan Quill memberi warnanya sendiri sehingga harus di-override. */
+  .ql-toolbar.ql-snow .ql-picker-label.ql-active,
+  .ql-toolbar.ql-snow .ql-picker-label.ql-active .ql-stroke {
+    color: var(--text) !important;
     stroke: var(--text) !important;
   }
 
@@ -274,14 +290,15 @@
     align-items: center;
   }
 
-  /* Segmented control: satu wadah pill, dua segmen tanpa kotak masing-masing.
-     Tinggi total 32px (28px segmen + 2px padding atas-bawah). */
+  /* Segmented control: wadah inset gelap, segmen aktif berupa permukaan
+     terangkat. Tinggi total 32px (28px segmen + 2px padding atas-bawah). */
   .mode-switch {
     display: flex;
     align-items: center;
     gap: 2px;
     padding: 2px;
-    background: var(--bg-surface);
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
     border-radius: 999px;
   }
 
@@ -303,10 +320,10 @@
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
-  /* Aktif: tint lembut + tinta aksen, bukan blok aksen solid. */
+  /* Aktif: permukaan terangkat + teks putih, tanpa warna aksen. */
   .mode-btn.active {
-    background: var(--accent-tint);
-    color: var(--accent);
+    background: var(--bg-overlay);
+    color: var(--text);
     font-weight: 600;
   }
 
@@ -333,8 +350,8 @@
     outline-offset: -2px;
   }
   .pin-btn[aria-pressed="true"] {
-    background: var(--accent-tint);
-    color: var(--accent);
+    background: rgba(255, 255, 255, 0.10);
+    color: var(--text);
   }
 
   /* ====== EDITOR AREA ====== */
@@ -396,17 +413,19 @@
     max-width: calc(100% - 80px) !important;
   }
 
-  /* ====== WYSIWYG CONTENT STYLES ====== */
+  /* ====== WYSIWYG CONTENT STYLES ======
+     Hirarki dibedakan lewat bobot dan kecerahan teks, bukan warna.
+     Satu-satunya warna di isi konten adalah tautan. */
   .ql-editor h1 {
     font-size: 2em !important;
     font-weight: 800 !important;
-    color: var(--accent) !important;
+    color: var(--text) !important;
     margin: 0.4em 0 0.2em !important;
   }
   .ql-editor h2 {
     font-size: 1.5em !important;
     font-weight: 700 !important;
-    color: var(--accent) !important;
+    color: var(--text) !important;
     margin: 0.6em 0 0.2em !important;
     padding-bottom: 0.1em;
     border-bottom: 1px solid var(--border);
@@ -414,14 +433,14 @@
   .ql-editor h3 {
     font-size: 1.25em !important;
     font-weight: 600 !important;
-    color: var(--purple) !important;
+    color: var(--text-dim) !important;
     margin: 0.5em 0 0.2em !important;
   }
   .ql-editor p {
     margin: 0.3em 0 !important;
   }
   .ql-editor strong { color: #fff !important; }
-  .ql-editor em { color: var(--yellow) !important; }
+  .ql-editor em { color: inherit !important; }
   .ql-editor s { color: var(--text-muted) !important; }
 
   .ql-editor a {
@@ -430,8 +449,8 @@
   }
 
   .ql-editor blockquote {
-    border-left: 4px solid var(--purple) !important;
-    background: rgba(203,166,247,0.06) !important;
+    border-left: 3px solid var(--border-hi) !important;
+    background: rgba(255, 255, 255, 0.03) !important;
     padding: 8px 16px !important;
     margin: 0.5em 0 !important;
     border-radius: 0 var(--radius) var(--radius) 0 !important;
@@ -441,7 +460,7 @@
   .ql-editor hr {
     border: none !important;
     height: 1px !important;
-    background: linear-gradient(90deg, transparent, var(--border-hi), transparent) !important;
+    background: var(--border) !important;
     margin: 1em 0 !important;
   }
 
@@ -450,10 +469,10 @@
     border-radius: var(--radius);
   }
 
-  /* Inline code */
+  /* Inline code: permukaan gelap, teks netral */
   .ql-editor code {
     background: var(--code-bg) !important;
-    color: var(--yellow) !important;
+    color: var(--code-text) !important;
     font-family: var(--font-mono) !important;
     font-size: 13px !important;
     border-radius: 4px !important;
@@ -484,24 +503,29 @@
     min-height: 1.6em;
   }
 
-  /* Dropdown pemilih bahasa yang disuntikkan modul syntax Quill */
+  /* Dropdown pemilih bahasa yang disuntikkan modul syntax Quill.
+     min-width mencegah teks bahasa terpotong ("Rust" jadi "Rus…"). */
   .ql-editor .ql-code-block-container > .ql-ui {
     position: absolute;
-    top: 5px;
+    top: 6px;
     right: 8px;
-    width: auto;
-    height: 20px;
-    padding: 0 4px;
+    min-width: 76px;
+    height: 22px;
+    padding: 0 8px;
     font-family: var(--font-sans) !important;
     font-size: 11px;
     color: var(--text-muted);
     background: var(--bg-surface);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 6px;
     outline: none;
     cursor: pointer;
-    opacity: 0.55;
-    transition: opacity 0.15s;
+    opacity: 0.6;
+    transition: opacity 0.15s, border-color 0.15s;
+  }
+  .ql-editor .ql-code-block-container > .ql-ui:hover,
+  .ql-editor .ql-code-block-container > .ql-ui:focus-visible {
+    border-color: var(--border-hi);
   }
   .ql-editor .ql-code-block-container:hover > .ql-ui { opacity: 1; }
 
@@ -510,7 +534,7 @@
 
   .ql-editor ul > li::before,
   .ql-editor ol > li::before {
-    color: var(--accent) !important;
+    color: var(--text-muted) !important;
   }
 
   /* ====== TABLE ====== */
@@ -615,7 +639,9 @@
   <div id="toolbar">
     <!-- Brand cukup simbol: nama aplikasi disampaikan lewat aria-label. -->
     <span class="brand" role="img" aria-label="MarkRust">◆</span>
+    <span class="tb-divider" aria-hidden="true"></span>
     <div id="quill-toolbar"></div>
+    <span class="tb-divider" aria-hidden="true"></span>
     <div class="toolbar-right">
       <!-- Segmented control: dua mode dalam satu wadah pill. -->
       <div class="mode-switch" role="group" aria-label="Mode editor">
