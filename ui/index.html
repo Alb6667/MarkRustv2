@@ -740,10 +740,12 @@
   </div>
 </div>
 
+<!-- Library klasik (UMD/IIFE) dimuat lebih dulu karena app.js adalah ES module
+     yang dievaluasi secara deferred; global Quill/marked/hljs sudah siap. -->
 <script src="vendor/highlight/highlight.min.js"></script>
 <script src="vendor/quill/quill.js"></script>
 <script src="vendor/marked/marked.umd.js"></script>
-<script src="app.js"></script>
+<script type="module" src="app.js"></script>
 
 </body>
 </html>

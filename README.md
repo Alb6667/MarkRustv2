@@ -22,20 +22,62 @@ Build rilis:
 cd src-tauri && cargo tauri build
 ```
 
-Frontend bisa juga dibuka langsung di browser (untuk inspeksi UI) dengan menyajikan
-folder `ui/` secara statis — seluruh library sudah di-vendoring, jadi tidak butuh internet.
+Frontend bisa juga dibuka di browser (untuk inspeksi UI) dengan menyajikan folder
+`ui/` secara statis — `app.js` kini ES module, jadi **harus lewat HTTP**, bukan
+`file://`:
+
+```bash
+cd ui && python3 -m http.server 8080   # lalu buka http://localhost:8080
+```
+
+Seluruh library sudah di-vendoring, jadi tetap tidak butuh internet saat runtime.
 
 ## Struktur
 
 ```
 ui/
   index.html        markup + tema
-  app.js            seluruh logika editor dan konversi
+  app.js            logika UI: inisialisasi Quill, toolbar, mode, statistik
+  core/
+    serialize.js    Delta Quill -> Markdown (murni, tanpa DOM/Quill instance)
+    markdown.js     Markdown -> HTML untuk Quill + statistik dokumen
+    quill-setup.js  registrasi blot <hr> & matcher clipboard (dipakai app + tes)
   vendor/           library pihak ketiga (lokal, offline-ready)
+tests/
+  harness.js        jsdom + Quill/marked hasil vendoring (bukan mock)
+  *.test.js         unit + round-trip sungguhan
+.github/workflows/  CI: tes Node + build Rust di Linux/Windows/macOS
 src-tauri/
-  src/main.rs      shell Tauri (jendela + webview)
-  tauri.conf.json  konfigurasi aplikasi
+  src/main.rs       shell Tauri (jendela + webview)
+  tauri.conf.json   konfigurasi aplikasi
 ```
+
+Modul `ui/core/` sengaja **murni** (tidak menyentuh `window`, tidak menyimpan
+instance Quill). `serializeLines()` menerima array deskriptor baris biasa,
+sehingga seluruh logika konversi bisa diuji tanpa browser. `linesFromQuill()`
+adalah satu-satunya jembatan ke objek Quill nyata.
+
+> **Catatan tooling:** `package.json` di root **hanya untuk dev/test**.
+> Runtime aplikasi tetap tanpa Node, tanpa bundler, tanpa framework.
+
+## Pengujian
+
+```bash
+npm ci
+npm test
+```
+
+Tes berjalan di `node:test` + jsdom dan menggunakan berkas `ui/vendor/` yang
+**sama** dengan yang dikirim ke webview — jadi round-trip yang diuji bukan
+tiruan. Cakupan: heading, indentasi & bahasa code block, fence backtick
+bersarang, list campuran bernomor, task list, alignment tabel, garis pemisah,
+tautan/gambar, warna, underline, escape teks, penolakan injeksi CSS/URL,
+idempotensi serialisasi, serta paritas jumlah kata lintas mode.
+
+Beberapa perilaku yang sengaja didokumentasikan sebagai **batasan yang diketahui**
+(diuji supaya perubahannya ketahuan): soft line break melebur jadi spasi sesuai
+CommonMark, hard break di paragraf biasa berubah jadi dua paragraf, dan raw HTML
+kehilangan tag pembungkusnya.
 
 ## Cara kerja konversi
 

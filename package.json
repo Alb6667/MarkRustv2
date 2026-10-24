@@ -1,0 +1,14 @@
+{
+  "name": "markrust-devtools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Dev/test tooling ONLY. MarkRust runtime needs no Node, no bundler, no framework.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:watch": "node --test --watch tests/*.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
+}
