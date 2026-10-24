@@ -9,7 +9,8 @@ Dokumen ini adalah titik masuk untuk melanjutkan pekerjaan; baca bersama
 Editor dan recovery native sudah diimplementasikan. M1a–M1c memiliki tes otomatis
 serta build/test CI lintas OS yang hijau pada commit `0ecfd7a`. Audit lifecycle
 lanjutan menambah pengaman operasi async dan membawa jumlah tes JS menjadi
-**144 lulus**. Hasil CI audit terbaru dicatat di bawah setelah verifikasi.
+**144 lulus**. CI audit `40074055940` pada commit `b931d22` juga lulus: Node serta
+build/test Rust Linux, Windows, macOS.
 
 **Belum siap dinyatakan rilis publik. M1 belum ditutup secara keseluruhan, M2
 belum dijalankan di webview desktop nyata.** Jangan menyamakan build CI dengan
@@ -140,4 +141,4 @@ perbaikan blocker data/security.
 - `3c7fa47`: M1a + koreksi lock Windows.
 - `c74339b`: M1b quota + tes proses kill.
 - `0ecfd7a`: M1c pemilih recovery.
-- Audit terakhir: commit berjudul `Audit document lifecycle races and add native test handoff`.
+- `b931d22`: audit lifecycle + checklist native dan laporan handoff; CI `40074055940` lulus.
