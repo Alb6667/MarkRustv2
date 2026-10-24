@@ -166,6 +166,59 @@ pub fn clear_recovery(app: tauri::AppHandle) -> Result<(), String> {
     })
 }
 
+// IDs are directory names, never arbitrary filesystem paths from the webview.
+fn candidate_path(base: &Path, id: &str) -> Result<PathBuf, String> {
+    if id == "legacy" { return Ok(base.join("recovery-v1")); }
+    if !id.starts_with("session-") || !id.bytes().all(|c| c.is_ascii_digit() || c == b'-' || c.is_ascii_lowercase()) {
+        return Err("ID recovery tidak valid".into());
+    }
+    Ok(base.join("recovery-v2").join(id))
+}
+#[tauri::command]
+pub fn list_recoveries(app: tauri::AppHandle) -> Result<String, String> {
+    // Initialize/adopt once, then list our recovery and unlocked abandoned ones.
+    with_session(&app, |_| Ok(()))?;
+    let state = SESSION.lock().map_err(|e| e.to_string())?;
+    let own = &state.as_ref().unwrap().dir;
+    let base = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut dirs = Vec::new();
+    for entry in fs::read_dir(base.join("recovery-v2")).map_err(|e| e.to_string())? {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        if fs::symlink_metadata(&path).map_err(|e| e.to_string())?.is_dir() && path.file_name().is_some_and(|n| n.to_string_lossy().starts_with("session-")) { dirs.push(path); }
+    }
+    if base.join("recovery-v1").is_dir() { dirs.push(base.join("recovery-v1")); }
+    let mut rows = Vec::new();
+    for dir in dirs {
+        let held;
+        if &dir != own {
+            held = lock_session(&dir)?;
+            if held.is_none() { continue; }
+        }
+        if let Ok(Some(raw)) = read(&dir) {
+            let data: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+            let id = if dir == base.join("recovery-v1") { "legacy".to_string() }
+                else { dir.file_name().unwrap().to_string_lossy().into_owned() };
+            rows.push(serde_json::json!({"id":id,"path":data["path"],"savedAt":data["savedAt"]}));
+        }
+    }
+    Ok(serde_json::Value::Array(rows).to_string())
+}
+#[tauri::command]
+pub fn select_recovery(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let mut state = SESSION.lock().map_err(|e| e.to_string())?;
+    let base = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let path = candidate_path(&base, &id)?;
+    if state.as_ref().is_some_and(|s| s.dir == path) { return Ok(()); }
+    // Reject symlink directories and check ownership again, not just at listing.
+    if !fs::symlink_metadata(&path).map_err(|e| e.to_string())?.is_dir() {
+        return Err("Recovery tidak valid".into());
+    }
+    let selected = lock_session(&path)?.ok_or("Recovery sedang dipakai instance lain")?;
+    if read(&path)?.is_none() { return Err("Recovery sudah tidak tersedia".into()); }
+    *state = Some(selected); // Release previous lock without deleting its files.
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -263,6 +316,16 @@ mod tests {
         assert!(read(&recovered.dir).unwrap().unwrap().contains("child draft"));
         drop(recovered); drop(parent);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn recovery_ids_cannot_escape_storage_root() {
+        let base = Path::new("app-data");
+        assert!(candidate_path(base, "../outside").is_err());
+        assert!(candidate_path(base, "session-../../outside").is_err());
+        assert!(candidate_path(base, "session-foo/bar").is_err());
+        assert_eq!(candidate_path(base, "session-123-45").unwrap(), base.join("recovery-v2/session-123-45"));
+        assert_eq!(candidate_path(base, "legacy").unwrap(), base.join("recovery-v1"));
     }
 
 }

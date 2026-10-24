@@ -143,3 +143,11 @@ known issues, dan catatan rilis tersedia. Beta tidak otomatis berarti stabil.
 - Masih tersisa: UI memilih beberapa recovery, pengelolaan sesi/dokumen lebih
   lengkap, dan checklist dua aplikasi desktop nyata (M2). Jangan tandai M1/M2
   selesai hanya berdasarkan tes subprocess.
+
+### Pelaksanaan M1c
+
+- Pemilih startup untuk beberapa recovery, label path/waktu, batal tanpa hapus.
+- Pemeriksaan ulang lock saat pemilihan dan validasi ID di backend.
+- Tes DOM untuk pemilihan/batal dan path yang mengandung markup; tes ID Rust.
+- M1/M2 belum ditutup: tetap diperlukan uji dialog/webview desktop nyata,
+  pengelolaan recovery rusak dan versi manual, serta audit lifecycle dokumen.

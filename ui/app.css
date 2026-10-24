@@ -758,3 +758,7 @@
 }
 
 #sb-draft-error { color: #f2b66d; }
+
+#recovery-dialog { max-width: min(640px, 90vw); }
+#recovery-list { display: grid; gap: 8px; max-height: 50vh; overflow: auto; margin: 16px 0; }
+#recovery-list button { text-align: left; overflow-wrap: anywhere; padding: 10px; }

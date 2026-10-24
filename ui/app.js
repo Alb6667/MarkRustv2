@@ -34,6 +34,7 @@ import {
   showError, setWindowTitle, basename, isMarkdownFilename, titleFor,
   DEFAULT_FILENAME
 } from './core/files.js';
+import { pickRecovery } from './core/recovery-picker.js';
 import { createDiskRecovery } from './core/recovery.js';
 import {
   readDraft, saveDraft, clearDraft, restoreMessage, DRAFT_KEY
@@ -650,6 +651,14 @@ function boot() {
     const revision = editRevision;
     let draft;
     try {
+      if (diskRecovery) {
+        const rows = await diskRecovery.list();
+        if (rows.length > 1) {
+          const id = await pickRecovery(document, rows);
+          if (!id || generation !== documentGeneration || revision !== editRevision) return false;
+          await diskRecovery.select(id);
+        }
+      }
       draft = diskRecovery ? await diskRecovery.read() : null;
       if (!draft) draft = readDraft(draftStorage); // Migration from older versions.
     } catch (err) {

@@ -113,6 +113,13 @@
   </footer>
 </div>
 
+<dialog id="recovery-dialog" aria-labelledby="recovery-title">
+  <h2 id="recovery-title">Pilih draf untuk dipulihkan</h2>
+  <p>Sesi aktif tidak ditampilkan. Draf lain tetap disimpan.</p>
+  <div id="recovery-list"></div>
+  <form method="dialog"><button type="submit">Nanti saja</button></form>
+</dialog>
+
 <!-- Dialog URL gambar. window.prompt tidak reliabel di webview Tauri. -->
 <dialog id="image-dialog" aria-labelledby="image-dialog-title">
   <form method="dialog" id="image-form">

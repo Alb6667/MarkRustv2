@@ -351,3 +351,17 @@ mengikuti batas ini.
 Tes Rust kini menjalankan proses anak nyata: sesi aktif dilewati, proses anak
 dihentikan paksa, lalu lock dan cadangannya dapat diambil kembali. Ini menguji
 filesystem/process, bukan dialog atau lifecycle webview desktop.
+
+### M1c — Pemilih recovery saat startup
+
+Jika beberapa recovery tersedia, dialog startup menampilkan path/nama dokumen
+serta waktu snapshot. Pilih satu untuk melanjutkan konfirmasi pemulihan;
+**Nanti saja** menutup pemilih tanpa menghapus snapshot. Sesi lain yang tidak
+dipilih tetap disimpan. Pemilih belum menyediakan hapus massal atau pemilihan
+versi snapshot manual.
+
+Daftar hanya menyertakan sesi milik instance ini atau sesi yang lock-nya dapat
+diambil. Lock diperiksa ulang saat memilih, karena instance lain mungkin sudah
+mengambil sesi sejak daftar ditampilkan. ID recovery dibatasi ke nama sesi,
+bukan path filesystem dari frontend. Recovery yang seluruh snapshot-nya rusak
+tidak ditampilkan dalam daftar ini dan tidak dihapus.

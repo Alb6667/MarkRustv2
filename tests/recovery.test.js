@@ -31,3 +31,15 @@ test('disk queue recovers after a failed write and validates reads', async () =>
   await disk.write({ markdown: 'b' });
   assert.equal((await disk.read()).markdown, '');
 });
+
+test('listing and selecting recoveries uses serialized native commands', async () => {
+  const calls = [];
+  const disk = createDiskRecovery({ core: { invoke: async (cmd, args) => {
+    calls.push([cmd, args]);
+    return cmd === 'list_recoveries' ? JSON.stringify([{ id: 'session-1', path: null }]) : null;
+  } } });
+  assert.equal((await disk.list())[0].id, 'session-1');
+  await disk.select('session-1');
+  assert.deepEqual(calls.map(([cmd]) => cmd), ['list_recoveries', 'select_recovery']);
+  assert.deepEqual(calls[1][1], { id: 'session-1' });
+});

@@ -21,6 +21,15 @@ export function createDiskRecovery(tauri) {
         return data;
       });
     },
+    list() {
+      return enqueue(async () => {
+        const raw = await tauri.core.invoke('list_recoveries');
+        const rows = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(rows)) throw new Error('Daftar recovery tidak valid');
+        return rows;
+      });
+    },
+    select(id) { return enqueue(() => tauri.core.invoke('select_recovery', { id })); },
     clear() { return enqueue(() => tauri.core.invoke('clear_recovery')); }
   };
 }
