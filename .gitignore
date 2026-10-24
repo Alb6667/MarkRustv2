@@ -1,1 +1,9 @@
-.target/
+# Artefak build Rust (Cargo membuat folder "target", bukan ".target")
+target/
+
+# Dependensi Node (jika kelak ada tooling frontend)
+node_modules/
+
+# Beras OS
+.DS_Store
+Thumbs.db
