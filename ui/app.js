@@ -489,8 +489,15 @@ function boot() {
     });
   }
 
+  function documentStamp() { return [documentGeneration, editRevision]; }
+  function documentUnchanged(stamp) {
+    return stamp[0] === documentGeneration && stamp[1] === editRevision;
+  }
+
   async function newDocument() {
+    const stamp = documentStamp();
     if (dirty && !(await confirmDiscard(tauri))) return false;
+    if (!documentUnchanged(stamp)) return false;
     discardDraft();
     currentPath = null;
     applyDocument('');
@@ -500,10 +507,12 @@ function boot() {
   }
 
   async function openDocument() {
+    const stamp = documentStamp();
     if (dirty && !(await confirmDiscard(tauri))) return false;
+    if (!documentUnchanged(stamp)) return false;
     try {
       const result = tauri ? await openWithTauri(tauri) : await pickBrowserFile();
-      if (!result) return false;
+      if (!result || !documentUnchanged(stamp)) return false;
       discardDraft();
       currentPath = result.path;
       applyDocument(result.contents);
@@ -600,8 +609,11 @@ function boot() {
       showError(tauri, 'Berkas harus berekstensi .md, .markdown, atau .txt');
       return;
     }
+    const stamp = documentStamp();
     readBrowserFile(file).then(async function (result) {
+      if (!documentUnchanged(stamp)) return;
       if (dirty && !(await confirmDiscard(tauri))) return;
+      if (!documentUnchanged(stamp)) return;
       discardDraft();
       currentPath = result.path;
       applyDocument(result.contents);
@@ -647,6 +659,7 @@ function boot() {
   /* Tawarkan pemulihan draf dari sesi sebelumnya. Dipanggil setelah konten
      awal dimuat, sehingga pengguna punya pembanding sebelum memutuskan. */
   async function restoreDraftIfAny() {
+    if (dirty) return false; // Recovery must never overwrite current unsaved work.
     const generation = documentGeneration;
     const revision = editRevision;
     let draft;

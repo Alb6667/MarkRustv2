@@ -365,3 +365,10 @@ diambil. Lock diperiksa ulang saat memilih, karena instance lain mungkin sudah
 mengambil sesi sejak daftar ditampilkan. ID recovery dibatasi ke nama sesi,
 bukan path filesystem dari frontend. Recovery yang seluruh snapshot-nya rusak
 tidak ditampilkan dalam daftar ini dan tidak dihapus.
+
+## Laporan untuk melanjutkan pekerjaan
+
+Baca [STATUS-HANDOFF.md](STATUS-HANDOFF.md) untuk status implementasi,
+verifikasi, risiko terbuka dan peta kode. Gunakan
+[DESKTOP-TEST-CHECKLIST.md](DESKTOP-TEST-CHECKLIST.md) untuk pengujian native;
+status awalnya belum diuji, bukan otomatis lulus karena CI hijau.

@@ -151,3 +151,10 @@ known issues, dan catatan rilis tersedia. Beta tidak otomatis berarti stabil.
 - Tes DOM untuk pemilihan/batal dan path yang mengandung markup; tes ID Rust.
 - M1/M2 belum ditutup: tetap diperlukan uji dialog/webview desktop nyata,
   pengelolaan recovery rusak dan versi manual, serta audit lifecycle dokumen.
+
+### Audit lifecycle & handoff
+
+Guard revisi ditambahkan pada Baru/Buka/drop setelah operasi async; restore
+menolak dokumen kotor. 144 tes JS lulus. Hasil, batas terbuka dan langkah lanjut
+ada di STATUS-HANDOFF.md; matriks uji native ada di DESKTOP-TEST-CHECKLIST.md.
+M1/M2 tetap belum dinyatakan tuntas tanpa bukti runtime desktop.

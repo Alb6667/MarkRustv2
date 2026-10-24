@@ -31,6 +31,8 @@ const destroyed = [];
 let nextAskResult = true;
 let failWrite = false;
 let pendingWrite = null;
+let pendingRead = null;
+let pendingAsk = null;
 let recoveryContents = null;
 let failRecovery = false;
 const DISK_DOC = '# Dokumen Dari Disk\n\nIsi dari berkas.\n';
@@ -47,6 +49,7 @@ window.__TAURI__ = {
       }
       if (cmd === 'read_recovery') return recoveryContents;
       if (cmd === 'clear_recovery') { recoveryContents = null; return; }
+      if (cmd === 'read_document' && pendingRead) await pendingRead;
       if (cmd === 'write_document' && pendingWrite) await pendingWrite;
       if (cmd === 'write_document' && failWrite) throw new Error('disk penuh');
       return cmd === 'read_document' ? DISK_DOC : null;
@@ -55,7 +58,7 @@ window.__TAURI__ = {
   dialog: {
     open: async () => '/home/u/catatan.md',
     save: async () => '/home/u/catatan-baru.md',
-    ask: async (msg) => { asks.push(msg); return nextAskResult; },
+    ask: async (msg) => { asks.push(msg); if (pendingAsk) await pendingAsk; return nextAskResult; },
     message: async () => {}
   },
   event: { listen: async () => () => {} },
@@ -476,4 +479,44 @@ test('mengetik berkelanjutan tetap mencadangkan sebelum berhenti', async () => {
   assert.ok(draft.markdown.includes('0'));
   await api.flushDraft();
   assert.equal(JSON.parse(window.localStorage.getItem(api.draftKey)).markdown, api.getMarkdown());
+});
+
+
+test('open yang tertunda tidak menimpa ketikan baru', async () => {
+  nextAskResult = true;
+  await api.newDocument();
+  let release;
+  pendingRead = new Promise((r) => { release = r; });
+  try {
+    const opening = api.openDocument();
+    await new Promise((r) => setTimeout(r, 0));
+    api.quill.insertText(0, 'Ketikan baru', 'user');
+    release();
+    assert.equal(await opening, false);
+    assert.match(api.getMarkdown(), /Ketikan baru/);
+    assert.equal(api.isDirty(), true);
+    assert.equal(api.getPath(), null);
+  } finally { release(); pendingRead = null; }
+});
+
+test('konfirmasi Baru yang tertunda tidak membuang perubahan setelah dialog dimulai', async () => {
+  await api.newDocument();
+  api.quill.insertText(0, 'Awal', 'user');
+  let release;
+  pendingAsk = new Promise((r) => { release = r; });
+  try {
+    const creating = api.newDocument();
+    api.quill.insertText(0, 'Terbaru ', 'user');
+    release();
+    assert.equal(await creating, false);
+    assert.match(api.getMarkdown(), /Terbaru/);
+    assert.equal(api.isDirty(), true);
+  } finally { release(); pendingAsk = null; }
+});
+
+test('pemulihan tidak menimpa dokumen yang sedang kotor', async () => {
+  assert.equal(api.isDirty(), true);
+  const before = api.getMarkdown();
+  assert.equal(await api.restoreDraftIfAny(), false);
+  assert.equal(api.getMarkdown(), before);
 });
